@@ -1,6 +1,7 @@
+import * as THREE from 'three';
+const _scratchVec = new THREE.Vector3();
 import React, { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import * as THREE from 'three';
 import { Torus, Sphere, Box, Sparkles as DreiSparkles } from '@react-three/drei';
 import { soundEngine } from '../audio';
 
@@ -180,7 +181,7 @@ export function XenonIonVortex({
 
                 // Check collision/interaction with protagonist locusPos
                 if (locusPos) {
-                    const distToPlanet = locusPos.distanceTo(new THREE.Vector3(px, 0, pz));
+                    const distToPlanet = locusPos.distanceTo(_scratchVec.set(px, 0, pz));
                     if (distToPlanet < 5.0 && planetCooldowns.current[i] <= 0) {
                         planetCooldowns.current[i] = 2.5;
                         soundEngine.playChronosSynchroMeshSound();

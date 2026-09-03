@@ -193,27 +193,27 @@ export function CyberItemsAndHazards({
 
                         {item.type === 'shield' && (
                             <Sphere args={[0.9, 10, 10]}>
-                                <meshStandardMaterial color={colorHex} emissive={colorHex} emissiveIntensity={2.5 * chargeScale} roughness={0.1} />
+                                <meshLambertMaterial color={colorHex} emissive={colorHex} emissiveIntensity={2.5 * chargeScale} />
                             </Sphere>
                         )}
                         {item.type === 'multiplier' && (
                             <Box args={[1.2, 1.2, 1.2]}>
-                                <meshStandardMaterial color={colorHex} emissive={colorHex} emissiveIntensity={3 * chargeScale} metalness={0.8} />
+                                <meshLambertMaterial color={colorHex} emissive={colorHex} emissiveIntensity={3 * chargeScale} />
                             </Box>
                         )}
                         {item.type === 'emp' && (
                             <Octahedron args={[1.1]}>
-                                <meshStandardMaterial color={colorHex} emissive={colorHex} emissiveIntensity={3.5 * chargeScale} />
+                                <meshLambertMaterial color={colorHex} emissive={colorHex} emissiveIntensity={3.5 * chargeScale} />
                             </Octahedron>
                         )}
                         {item.type === 'magnet' && (
                             <Torus args={[0.8, 0.3, 8, 16]}>
-                                <meshStandardMaterial color={colorHex} emissive={colorHex} emissiveIntensity={2.8 * chargeScale} />
+                                <meshLambertMaterial color={colorHex} emissive={colorHex} emissiveIntensity={2.8 * chargeScale} />
                             </Torus>
                         )}
                         {item.type === 'nanite' && (
                             <Sphere args={[1.0, 10, 10]}>
-                                <meshStandardMaterial color={colorHex} emissive={colorHex} emissiveIntensity={4 * chargeScale} wireframe />
+                                <meshLambertMaterial color={colorHex} emissive={colorHex} emissiveIntensity={4 * chargeScale} wireframe />
                             </Sphere>
                         )}
                     </group>
@@ -224,7 +224,7 @@ export function CyberItemsAndHazards({
             {hazards.map((hazard) => (
                 <group key={hazard.id} position={hazard.position}>
                     <Sphere args={[hazard.size, 12, 12]}>
-                        <meshStandardMaterial color="#ef4444" emissive="#dc2626" emissiveIntensity={4} roughness={0.2} />
+                        <meshLambertMaterial color="#ef4444" emissive="#dc2626" emissiveIntensity={4} />
                     </Sphere>
                     <Torus args={[hazard.size * 1.5, 0.18, 8, 16]} rotation={[Math.PI / 4, 0, 0]}>
                         <meshBasicMaterial color="#f87171" transparent opacity={0.85} />
@@ -264,11 +264,7 @@ export function CyberItemsAndHazards({
                         {/* Inner Rotating Gyroscope Gate Ring */}
                         {!gate.passed && (
                             <Torus args={[2.5, 0.2, 12, 32]} rotation={[gate.rotation * 1.5, 0, 0]}>
-                                <meshStandardMaterial 
-                                    color={isOvercharged ? '#fbbf24' : '#f43f5e'} 
-                                    emissive={isOvercharged ? '#f59e0b' : '#e11d48'} 
-                                    emissiveIntensity={3.5 * chargeScale} 
-                                />
+                                <meshLambertMaterial color={isOvercharged ? "#fbbf24" : "#f43f5e"} emissive={isOvercharged ? "#f59e0b" : "#e11d48"} emissiveIntensity={3.5 * chargeScale} />
                             </Torus>
                         )}
                     </group>

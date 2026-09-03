@@ -1,6 +1,7 @@
+import * as THREE from 'three';
+const _scratchVec = new THREE.Vector3();
 import React, { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import * as THREE from 'three';
 import { Torus, Sphere, Box, Sparkles as DreiSparkles } from '@react-three/drei';
 import { soundEngine } from '../audio';
 
@@ -72,7 +73,7 @@ export function ChronosOmniDifferentialVortex({
             }
 
             if (locusPos) {
-                const worldPos = new THREE.Vector3(sx, sy, 0);
+                _scratchVec.set(sx, sy, 0); const worldPos = _scratchVec;
                 const dist = locusPos.distanceTo(worldPos);
                 if (dist < 3.8 && satCooldowns.current[i] <= 0) {
                     satCooldowns.current[i] = 2.0;

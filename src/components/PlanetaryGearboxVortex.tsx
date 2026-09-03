@@ -1,6 +1,7 @@
+import * as THREE from 'three';
+const _scratchVec = new THREE.Vector3();
 import React, { useRef, useMemo, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
-import * as THREE from 'three';
 import { Torus, Sphere, Box, Sparkles as DreiSparkles } from '@react-three/drei';
 import { soundEngine } from '../audio';
 
@@ -133,7 +134,7 @@ export function PlanetaryGearboxVortex({
 
             // Locus collision
             if (locusPos) {
-                const worldPlanetPos = new THREE.Vector3(cx, cy, 0);
+                _scratchVec.set(cx, cy, 0); const worldPlanetPos = _scratchVec;
                 const dist = locusPos.distanceTo(worldPlanetPos);
                 if (dist < 4.0 && planetCooldowns.current[i] <= 0) {
                     planetCooldowns.current[i] = 2.0;
