@@ -1,0 +1,7 @@
+{
+  "name": "Quantum Confusion",
+  "description": "Step into the ultimate cybernetic singularity! Quantum Confusion is a hyper-addictive physics arcade thriller featuring chaotic gravity tilt control, brutal hazard dodging, time-bending chrono stasis, and mind-bending orbital slingshots. Master the quantum grid, survive the lethal shields, and climb the global leaderboards!",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

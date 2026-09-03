@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">QuantumConfusion</string>
+    <string name="title_activity_main">QuantumConfusion</string>
+    <string name="package_name">com.quantum.confusion</string>
+    <string name="custom_url_scheme">com.quantum.confusion</string>
+</resources>
