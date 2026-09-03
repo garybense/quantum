@@ -8,6 +8,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Volume2, VolumeX, Plus, RefreshCw, Zap, Shield, Trophy, Award, Flame, Sparkles, AlertTriangle, Cpu, Radio, Heart, Clock, FastForward, Pause, RotateCcw, Target, Compass, Move, Navigation, Smartphone, Sliders, ShoppingBag, Terminal } from 'lucide-react';
 import { Preferences } from '@capacitor/preferences';
 import { soundEngine } from './audio';
+import { RenderPerfStats } from './components/PerfOverlay';
+import { gameRefs } from './game/refs';
+import { sessionStore, useSessionStore } from './game/sessionStore';
+import { CoreHUD, ShieldHUD, LevelHUD, ScoreHUD, TimeScaleHUD, RewindButtonHUD } from './components/HUD';
 import { FractalSingularity, FractalAlgorithmMode } from './components/FractalSingularity';
 import { CyberItemsAndHazards } from './components/CyberItemsAndHazards';
 import { LevelUpModal } from './components/LevelUpModal';
@@ -159,12 +163,20 @@ function ShatterDebris({ size, colorHex, type, hue = 200 }: { size: number; colo
     const groupRef = useRef<THREE.Group>(null);
     const startTimeRef = useRef<number>(performance.now());
 
-    // Play crystalline shatter audio effect on component mount
     useEffect(() => {
         soundEngine.playShatterSound(size, hue);
     }, [size, hue]);
 
-    // Generate debris shard parameters
+    const fragMat = useMemo(() => new THREE.MeshStandardMaterial({
+        color: colorHex,
+        emissive: colorHex,
+        emissiveIntensity: 0.8,
+        metalness: 0.7,
+        roughness: 0.2,
+        transparent: true,
+        opacity: 0.95,
+    }), [colorHex]);
+
     const fragments = useMemo(() => {
         const count = 16;
         const frags = [];
@@ -173,7 +185,7 @@ function ShatterDebris({ size, colorHex, type, hue = 200 }: { size: number; colo
             const theta = (Math.random() - 0.5) * Math.PI * 0.8;
             const speed = (3.0 + Math.random() * 5.0) * Math.max(0.8, size * 0.7);
             const vx = Math.cos(theta) * Math.cos(phi) * speed;
-            const vy = (Math.abs(Math.sin(theta)) + 0.4) * speed * 1.2; // outward & upwards arc
+            const vy = (Math.abs(Math.sin(theta)) + 0.4) * speed * 1.2;
             const vz = Math.cos(theta) * Math.sin(phi) * speed;
 
             const rx = (Math.random() - 0.5) * 18;
@@ -204,10 +216,11 @@ function ShatterDebris({ size, colorHex, type, hue = 200 }: { size: number; colo
         const progress = Math.min(1.0, elapsed / 1.35);
         const fade = Math.max(0, 1.0 - Math.pow(progress, 1.8));
 
+        fragMat.opacity = fade * 0.95;
+
         fragments.forEach((f) => {
             if (f.ref.current) {
-                // Apply velocity, gravity, drag
-                f.vy -= delta * 14.0; // gravity pulling debris down
+                f.vy -= delta * 14.0;
                 const drag = Math.pow(0.91, delta * 60);
                 f.vx *= drag;
                 f.vz *= drag;
@@ -220,24 +233,11 @@ function ShatterDebris({ size, colorHex, type, hue = 200 }: { size: number; colo
                 f.ref.current.rotation.y += f.ry * delta;
                 f.ref.current.rotation.z += f.rz * delta;
 
-                // Scale down gradually
                 const currentScale = f.fragSize * Math.max(0.1, 1.0 - progress * 0.5);
                 f.ref.current.scale.set(currentScale, currentScale, currentScale);
-
-                // Update opacity on mesh material
-                f.ref.current.traverse((child) => {
-                    if ((child as THREE.Mesh).isMesh) {
-                        const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
-                        if (mat) {
-                            mat.transparent = true;
-                            mat.opacity = fade * 0.95;
-                        }
-                    }
-                });
             }
         });
 
-        // Expand shockwave rings
         if (ringRef.current && ringMatRef.current) {
             const rScale = 1.0 + progress * 4.0;
             ringRef.current.scale.set(rScale, rScale, rScale);
@@ -261,29 +261,12 @@ function ShatterDebris({ size, colorHex, type, hue = 200 }: { size: number; colo
                 <meshBasicMaterial ref={torusMatRef} color={colorHex} transparent opacity={0.9} depthWrite={false} />
             </Torus>
 
-            {/* Debris Shards flying away, tumbling, and fading out */}
             {fragments.map((f, idx) => (
                 <group key={idx} ref={f.ref}>
                     {f.isBox ? (
-                        <Box args={[1, 1, 1]}>
-                            <meshStandardMaterial
-                                color={colorHex}
-                                emissive={colorHex}
-                                emissiveIntensity={0.8}
-                                metalness={0.7}
-                                roughness={0.2}
-                            />
-                        </Box>
+                        <Box args={[1, 1, 1]} material={fragMat} />
                     ) : (
-                        <Sphere args={[0.8, 6, 6]}>
-                            <meshStandardMaterial
-                                color="#ffffff"
-                                emissive={colorHex}
-                                emissiveIntensity={1.0}
-                                metalness={0.8}
-                                roughness={0.1}
-                            />
-                        </Sphere>
+                        <Sphere args={[0.8, 6, 6]} material={fragMat} />
                     )}
                 </group>
             ))}
@@ -291,19 +274,16 @@ function ShatterDebris({ size, colorHex, type, hue = 200 }: { size: number; colo
     );
 }
 
-// Solid Rigid Physics Objects Component with Sound Collision Triggers
-function SolidObjectItem({ 
-    obj, 
-    locusData,
+function SolidObjectItem({
+    obj,
     onObjectRammed,
     onKineticSling,
     onCoreImpact,
     isPaused = false,
     subsystem3Power = 1.0,
     isShieldActive = true,
-}: { 
-    obj: SolidPhysicsObjectData; 
-    locusData: { pos: THREE.Vector3 | null, isPulling: boolean, isMoving?: boolean };
+}: {
+    obj: SolidPhysicsObjectData;
     onObjectRammed: () => void;
     onKineticSling: (objType: string) => void;
     onCoreImpact?: (impactPos: THREE.Vector3, isSlung: boolean) => void;
@@ -313,62 +293,68 @@ function SolidObjectItem({
 }) {
     const rbRef = useRef<any>(null);
     const meshGroupRef = useRef<THREE.Group>(null);
-    const lastWobbleTime = useRef<number>(0);
+    const healthBarRef = useRef<THREE.Group>(null);
+    const healthFillMeshRef = useRef<THREE.Mesh>(null);
 
     const isOrbitingRef = useRef<boolean>(false);
-    const [isOrbitingState, setIsOrbitingState] = useState<boolean>(false);
     const orbitAngleRef = useRef<number>(0);
-    const orbitRadiusRef = useRef<number>(6.0);
-    const orbitSpinsRef = useRef<number>(0);
+    const orbitRadiusRef = useRef<number>(obj.size + 4.5);
     const orbitCooldownRef = useRef<number>(0);
 
-    const hasBeenSlungRef = useRef<boolean>(false);
     const isOuterOrbitingRef = useRef<boolean>(false);
-    const [isOuterOrbitingState, setIsOuterOrbitingState] = useState<boolean>(false);
     const outerOrbitAngleRef = useRef<number>(0);
-    const outerOrbitRadiusRef = useRef<number>(52.0);
+    const outerOrbitRadiusRef = useRef<number>(50.0);
     const outerOrbitSpinsRef = useRef<number>(0);
     const outerOrbitDirRef = useRef<number>(1);
     const outerOrbitCooldownRef = useRef<number>(0);
     const coreImpactCooldownRef = useRef<number>(0);
-
-    const healthBarRef = useRef<THREE.Group>(null);
-    const [shockwaves, setShockwaves] = useState<{ id: number; progress: number; maxScale: number; color: string }[]>([]);
+    const hasBeenSlungRef = useRef<boolean>(false);
 
     const maxDurability = useMemo(() => Math.round(obj.mass * 8), [obj.mass]);
-    const [durability, setDurability] = useState<number>(maxDurability);
+    const durabilityRef = useRef<number>(maxDurability);
+    const isShatteredRef = useRef<boolean>(false);
     const [isShattered, setIsShattered] = useState<boolean>(false);
     const [shatterPos, setShatterPos] = useState<[number, number, number]>([0, 0, 0]);
 
+    const lastCollisionTimeRef = useRef<number>(0);
+
+    const shockwaveSlotsRef = useRef([
+        { active: false, progress: 0, maxScale: 1 },
+        { active: false, progress: 0, maxScale: 1 },
+        { active: false, progress: 0, maxScale: 1 }
+    ]);
+    const shockwaveGroupRefs = [
+        useRef<THREE.Group>(null),
+        useRef<THREE.Group>(null),
+        useRef<THREE.Group>(null)
+    ];
+    const shockwaveMatRefs = [
+        useRef<THREE.MeshBasicMaterial>(null),
+        useRef<THREE.MeshBasicMaterial>(null),
+        useRef<THREE.MeshBasicMaterial>(null)
+    ];
+
     const triggerShockwave = useCallback((intensity = 1.0) => {
-        const newId = Date.now() + Math.random();
-        const color = obj.colorHex || '#38bdf8';
-        setShockwaves(prev => [
-            ...prev.slice(-3),
-            { id: newId, progress: 0, maxScale: obj.size * 3.5 + intensity * 1.5, color }
-        ]);
-    }, [obj.size, obj.colorHex]);
+        const slot = shockwaveSlotsRef.current.find(s => !s.active) || shockwaveSlotsRef.current[0];
+        slot.active = true;
+        slot.progress = 0;
+        slot.maxScale = obj.size * 3.5 + intensity * 1.5;
+    }, [obj.size]);
 
     const takeDamage = useCallback((amount: number) => {
-        setDurability(prev => Math.max(0, prev - amount));
-    }, []);
-
-    useEffect(() => {
-        if (durability <= 0 && !isShattered) {
+        durabilityRef.current = Math.max(0, durabilityRef.current - amount);
+        if (durabilityRef.current <= 0 && !isShatteredRef.current) {
+            isShatteredRef.current = true;
             let sx = obj.position[0];
             let sy = obj.position[1];
             let sz = obj.position[2];
             if (rbRef.current) {
                 try {
                     const t = rbRef.current.translation();
-                    sx = t.x;
-                    sy = t.y;
-                    sz = t.z;
+                    sx = t.x; sy = t.y; sz = t.z;
                     rbRef.current.setTranslation({ x: sx, y: -500, z: sz }, true);
                     rbRef.current.setLinvel({ x: 0, y: 0, z: 0 }, true);
-                } catch (e) {
-                    // Safe Rapier WASM exception catch guard
-                }
+                } catch (e) {}
             }
             setShatterPos([sx, sy, sz]);
             setIsShattered(true);
@@ -377,26 +363,23 @@ function SolidObjectItem({
             triggerHapticFeedback([80, 40, 120, 40, 150]);
             onObjectRammed();
 
-            const timer = setTimeout(() => {
-                setDurability(maxDurability);
+            setTimeout(() => {
+                durabilityRef.current = maxDurability;
+                isShatteredRef.current = false;
                 setIsShattered(false);
-                setTimeout(() => {
-                    if (rbRef.current) {
-                        try {
-                            rbRef.current.setTranslation({ 
-                                x: obj.position[0] + (Math.random() - 0.5) * 6, 
-                                y: 18 + Math.random() * 4, 
-                                z: obj.position[2] + (Math.random() - 0.5) * 6 
-                            }, true);
-                            rbRef.current.setLinvel({ x: (Math.random() - 0.5) * 4, y: -2, z: (Math.random() - 0.5) * 4 }, true);
-                        } catch (e) {}
-                    }
-                }, 50);
+                if (rbRef.current) {
+                    try {
+                        rbRef.current.setTranslation({
+                            x: obj.position[0] + (Math.random() - 0.5) * 6,
+                            y: 18 + Math.random() * 4,
+                            z: obj.position[2] + (Math.random() - 0.5) * 6
+                        }, true);
+                        rbRef.current.setLinvel({ x: (Math.random() - 0.5) * 4, y: -2, z: (Math.random() - 0.5) * 4 }, true);
+                    } catch (e) {}
+                }
             }, 1400);
-
-            return () => clearTimeout(timer);
         }
-    }, [durability, isShattered, obj, maxDurability, onObjectRammed]);
+    }, [obj, maxDurability, onObjectRammed]);
 
     useFrame((state, delta) => {
         if (!rbRef.current || !meshGroupRef.current || isPaused || isShattered) return;
@@ -404,246 +387,90 @@ function SolidObjectItem({
         if (healthBarRef.current) {
             healthBarRef.current.quaternion.copy(state.camera.quaternion);
         }
-
-        if (shockwaves.length > 0) {
-            setShockwaves(prev =>
-                prev
-                    .map(s => ({ ...s, progress: s.progress + delta * 2.8 }))
-                    .filter(s => s.progress < 1.0)
-            );
+        if (healthFillMeshRef.current) {
+            healthFillMeshRef.current.scale.x = Math.max(0.001, durabilityRef.current / maxDurability);
         }
 
-        if (orbitCooldownRef.current > 0) {
-            orbitCooldownRef.current -= delta;
-        }
-        if (outerOrbitCooldownRef.current > 0) {
-            outerOrbitCooldownRef.current -= delta;
-        }
-        if (coreImpactCooldownRef.current > 0) {
-            coreImpactCooldownRef.current -= delta;
-        }
+        shockwaveSlotsRef.current.forEach((s, idx) => {
+            if (s.active) {
+                s.progress += delta * 2.8;
+                if (s.progress >= 1.0) s.active = false;
+                const grp = shockwaveGroupRefs[idx].current;
+                const mat = shockwaveMatRefs[idx].current;
+                if (grp) {
+                    grp.visible = s.active;
+                    if (s.active) {
+                        const sc = s.progress * s.maxScale;
+                        grp.scale.set(sc, sc, sc);
+                    }
+                }
+                if (mat) {
+                    mat.opacity = Math.max(0, (1 - s.progress) * 0.85);
+                }
+            } else if (shockwaveGroupRefs[idx].current) {
+                shockwaveGroupRefs[idx].current!.visible = false;
+            }
+        });
+
+        if (orbitCooldownRef.current > 0) orbitCooldownRef.current -= delta;
+        if (outerOrbitCooldownRef.current > 0) outerOrbitCooldownRef.current -= delta;
+        if (coreImpactCooldownRef.current > 0) coreImpactCooldownRef.current -= delta;
 
         const translation = rbRef.current.translation();
         _physObjPos.set(translation.x, translation.y, translation.z);
 
-        // Check central core impact (Core is at 0, 5, 0)
-        const distToCore = Math.sqrt(_physObjPos.x * _physObjPos.x + (_physObjPos.y - 5.0) * (_physObjPos.y - 5.0) + _physObjPos.z * _physObjPos.z);
-        const currentLinvel = rbRef.current.linvel();
-        const moveSpeed = Math.sqrt(currentLinvel.x * currentLinvel.x + currentLinvel.y * currentLinvel.y + currentLinvel.z * currentLinvel.z);
+        const px = gameRefs.locusPos.x;
+        const pz = gameRefs.locusPos.z;
+        const isPulling = gameRefs.isPulling;
 
-        // Impact detection radius is 9.5 (forcefield bubble boundary) when shield is active, or 6.5 when core exposed
-        const impactRadius = isShieldActive ? 9.5 : 6.5;
+        const distToPlayer = Math.sqrt((translation.x - px) * (translation.x - px) + (translation.z - pz) * (translation.z - pz));
 
-        if (distToCore < impactRadius && coreImpactCooldownRef.current <= 0 && (hasBeenSlungRef.current || moveSpeed > 10.0)) {
-            coreImpactCooldownRef.current = 1.0;
-            takeDamage(Math.round(28 + moveSpeed * 0.7));
-            if (onCoreImpact) {
-                onCoreImpact(_physObjPos, hasBeenSlungRef.current);
-            }
-
-            // PHYSICAL DEFLECTION OFF THE SHIELD FORCEFIELD!
-            if (isShieldActive) {
-                const defX = translation.x || 0.001;
-                const defZ = translation.z || 0.001;
-                const defLen = Math.sqrt(defX * defX + defZ * defZ) || 1.0;
-                const defSpeed = 80.0;
-
-                rbRef.current.setLinvel({ x: (defX / defLen) * defSpeed, y: 16.0, z: (defZ / defLen) * defSpeed }, true);
-                rbRef.current.setAngvel({ x: 30, y: 50, z: 30 }, true);
-                soundEngine.playShieldViolentImpactSound();
-                triggerHapticFeedback([80, 40, 120]);
-            }
-        }
-
-        // Check if we should enter orbital capture around Singularity Core
-        if (!isOrbitingRef.current && !isOuterOrbitingRef.current && orbitCooldownRef.current <= 0 && locusData.pos) {
-            const dist = _physObjPos.distanceTo(locusData.pos);
-            if (dist < 6.8 || (locusData.isPulling && dist < 10.0)) {
+        if (!isOrbitingRef.current && !isOuterOrbitingRef.current && orbitCooldownRef.current <= 0) {
+            if (distToPlayer < 6.8 || (isPulling && distToPlayer < 10.0)) {
                 isOrbitingRef.current = true;
-                setIsOrbitingState(true);
-                orbitAngleRef.current = Math.atan2(_physObjPos.z - locusData.pos.z, _physObjPos.x - locusData.pos.x);
-                orbitRadiusRef.current = Math.min(7.0, dist);
-                orbitSpinsRef.current = 0;
-                soundEngine.playWobbleResonance(1.0, 18, obj.hue, obj.size, obj.type);
-                triggerHapticFeedback([20, 30, 40]);
+                orbitAngleRef.current = Math.atan2(translation.z - pz, translation.x - px);
+                soundEngine.playSpinningObjectWobble(obj.hue, obj.size);
             }
         }
 
-        // Active orbital capture motion along core ring (orbits player 2 times before launch)
-        if (isOrbitingRef.current && locusData.pos) {
-            const spinSpeed = 13.0 + (locusData.isPulling ? 7.0 : 0.0);
-            const angleStep = delta * spinSpeed;
-            orbitAngleRef.current += angleStep;
-            orbitSpinsRef.current += angleStep;
-
-            orbitRadiusRef.current = Math.max(4.0, orbitRadiusRef.current - delta * 1.8);
-
-            const targetX = locusData.pos.x + Math.cos(orbitAngleRef.current) * orbitRadiusRef.current;
-            const targetZ = locusData.pos.z + Math.sin(orbitAngleRef.current) * orbitRadiusRef.current;
-            const targetY = locusData.pos.y + 0.8 + Math.sin(state.clock.getElapsedTime() * 12) * 0.4;
+        if (isOrbitingRef.current) {
+            const spinSpeed = 13.0 + (isPulling ? 7.0 : 0.0);
+            orbitAngleRef.current += delta * spinSpeed;
+            const targetX = px + Math.cos(orbitAngleRef.current) * orbitRadiusRef.current;
+            const targetZ = pz + Math.sin(orbitAngleRef.current) * orbitRadiusRef.current;
+            const targetY = 5.8 + Math.sin(state.clock.getElapsedTime() * 12) * 0.4;
 
             rbRef.current.setTranslation({ x: targetX, y: targetY, z: targetZ }, true);
-            rbRef.current.setAngvel({ x: 8, y: 22, z: 8 }, true);
 
-            // Skill-Based Slingshot Launch: launches along tangential direction of orbital arc!
-            if (orbitSpinsRef.current >= Math.PI * 2 * 2.0) {
+            if (isPulling) {
                 isOrbitingRef.current = false;
-                setIsOrbitingState(false);
-                orbitCooldownRef.current = 3.2;
                 hasBeenSlungRef.current = true;
-
-                // Launch along orbit tangent direction
+                orbitCooldownRef.current = 2.0;
                 const tangAngle = orbitAngleRef.current + Math.PI / 2;
-                let launchDirX = Math.cos(tangAngle);
-                let launchDirZ = Math.sin(tangAngle);
-
-                // If player is holding gravity pull, bend slingshot trajectory towards central core
-                if (locusData.isPulling && locusData.pos) {
-                    const toCoreX = -locusData.pos.x;
-                    const toCoreZ = -locusData.pos.z;
-                    const cLen = Math.sqrt(toCoreX * toCoreX + toCoreZ * toCoreZ) || 1.0;
-                    launchDirX = launchDirX * 0.5 + (toCoreX / cLen) * 0.5;
-                    launchDirZ = launchDirZ * 0.5 + (toCoreZ / cLen) * 0.5;
-                }
-
-                const len = Math.sqrt(launchDirX * launchDirX + launchDirZ * launchDirZ) || 1.0;
-                const launchSpeed = 38.0;
-
-                rbRef.current.setLinvel({ x: (launchDirX / len) * launchSpeed, y: 8.0, z: (launchDirZ / len) * launchSpeed }, true);
-                triggerHapticFeedback([40, 30, 70, 30, 90]);
+                rbRef.current.setLinvel({ x: Math.cos(tangAngle) * 45, y: 3, z: Math.sin(tangAngle) * 45 }, true);
+                soundEngine.playKineticSlingshotSound();
+                triggerHapticFeedback([40, 30, 80]);
                 onKineticSling(obj.type);
             }
-        } 
-        // Check Outer Machine Ring Gravitational Capture when slung item approaches outermost giant ring (radius 28.0 to 58.0)
-        // Fast rotation generates powerful gravitational capture (subsystem3Power >= 0.15)
-        if (!isOrbitingRef.current && !isOuterOrbitingRef.current && hasBeenSlungRef.current && outerOrbitCooldownRef.current <= 0) {
-            if (subsystem3Power >= 0.15) {
-                const distFromOrigin = Math.sqrt(_physObjPos.x * _physObjPos.x + _physObjPos.z * _physObjPos.z);
-                if (distFromOrigin >= 28.0 && distFromOrigin <= 58.0) {
-                    isOuterOrbitingRef.current = true;
-                    setIsOuterOrbitingState(true);
-                    outerOrbitAngleRef.current = Math.atan2(_physObjPos.z, _physObjPos.x);
-                    outerOrbitRadiusRef.current = 52.0; // Aligned directly with the outermost giant rotating ring
-                    outerOrbitSpinsRef.current = 0;
-
-                    // Calculate entry direction cross product to maintain momentum direction
-                    const curLinvel = rbRef.current.linvel();
-                    const crossY = _physObjPos.x * curLinvel.z - _physObjPos.z * curLinvel.x;
-                    outerOrbitDirRef.current = crossY < 0 ? -1 : 1;
-
-                    soundEngine.playKineticSlingshotSound();
-                    soundEngine.playWobbleResonance(1.4, 25, obj.hue, obj.size, obj.type);
-                    triggerHapticFeedback([50, 40, 80]);
-                }
-            }
-        }
-        // Active Outermost Machine Ring Orbit Motion (orbits along radius 52 in continuous entry direction)
-        if (isOuterOrbitingRef.current) {
-            const outerSpinSpeed = 1.2 * (subsystem3Power > 0 ? Math.max(0.6, subsystem3Power) : 1.0);
-            const angleStep = delta * outerSpinSpeed * outerOrbitDirRef.current;
-            outerOrbitAngleRef.current += angleStep;
-            outerOrbitSpinsRef.current += Math.abs(angleStep);
-
-            const targetX = Math.cos(outerOrbitAngleRef.current) * outerOrbitRadiusRef.current;
-            const targetZ = Math.sin(outerOrbitAngleRef.current) * outerOrbitRadiusRef.current;
-            const targetY = 3.5 + Math.sin(state.clock.getElapsedTime() * 4.0) * 0.6;
-
-            rbRef.current.setTranslation({ x: targetX, y: targetY, z: targetZ }, true);
-            rbRef.current.setAngvel({ x: 4 * outerSpinSpeed, y: 10 * outerSpinSpeed, z: 4 * outerSpinSpeed }, true);
-
-            // SKILL-BASED SLINGSHOT: After 2 full rotations or player pull, release along tangent vector!
-            const isPlayerPullRelease = locusData && locusData.isPulling && outerOrbitSpinsRef.current >= Math.PI * 0.5;
-            if (outerOrbitSpinsRef.current >= Math.PI * 2 * 2.0 || isPlayerPullRelease) {
-                isOuterOrbitingRef.current = false;
-                setIsOuterOrbitingState(false);
-                hasBeenSlungRef.current = true;
-                outerOrbitCooldownRef.current = 3.5;
-
-                // Tangent vector along the actual direction of orbital rotation
-                const tangAngle = outerOrbitAngleRef.current + (Math.PI / 2) * outerOrbitDirRef.current;
-                let launchDirX = Math.cos(tangAngle);
-                let launchDirZ = Math.sin(tangAngle);
-
-                // TACHYON GRAVITON INVERSION: When shield is DOWN (!isShieldActive), the Inversion Beam bends the sling trajectory directly towards the exposed central singularity!
-                if (!isShieldActive) {
-                    const toCoreX = -targetX;
-                    const toCoreZ = -targetZ;
-                    const cLen = Math.sqrt(toCoreX * toCoreX + toCoreZ * toCoreZ) || 1.0;
-                    launchDirX = launchDirX * 0.25 + (toCoreX / cLen) * 0.75;
-                    launchDirZ = launchDirZ * 0.25 + (toCoreZ / cLen) * 0.75;
-                } else if (locusData && locusData.isPulling && locusData.pos) {
-                    const pullX = locusData.pos.x - targetX;
-                    const pullZ = locusData.pos.z - targetZ;
-                    const pLen = Math.sqrt(pullX * pullX + pullZ * pullZ) || 1.0;
-                    launchDirX = launchDirX * 0.6 + (pullX / pLen) * 0.4;
-                    launchDirZ = launchDirZ * 0.6 + (pullZ / pLen) * 0.4;
-                }
-
-                const len = Math.sqrt(launchDirX * launchDirX + launchDirZ * launchDirZ) || 1.0;
-                const hyperSpeed = !isShieldActive ? 48.0 : (38.0 + subsystem3Power * 10.0);
-
-                rbRef.current.setLinvel({ x: (launchDirX / len) * hyperSpeed, y: 8.0, z: (launchDirZ / len) * hyperSpeed }, true);
-                soundEngine.playTachyonPulseSound();
-                triggerHapticFeedback([60, 50, 90, 50, 120]);
-                onKineticSling(obj.type + "_outer");
-            }
-        } else if (locusData.pos && locusData.isPulling) {
-            const dist = _physObjPos.distanceTo(locusData.pos);
-            if (dist < 35) {
-                const torqueForce = (35 - dist) * 0.18;
-                rbRef.current.applyTorqueImpulse({ 
-                    x: Math.sin(state.clock.getElapsedTime() * 5) * torqueForce, 
-                    y: torqueForce, 
-                    z: Math.cos(state.clock.getElapsedTime() * 5) * torqueForce 
-                }, true);
-            }
-        }
-
-        const angvel = rbRef.current.angvel();
-        const endLinvel = rbRef.current.linvel();
-        const rotSpeed = Math.sqrt(angvel.x * angvel.x + angvel.y * angvel.y + angvel.z * angvel.z);
-        const endMoveSpeed = Math.sqrt(endLinvel.x * endLinvel.x + endLinvel.y * endLinvel.y + endLinvel.z * endLinvel.z);
-
-        const wobbleIntensity = Math.min(1.0, rotSpeed * 0.12 + endMoveSpeed * 0.05);
-        if (wobbleIntensity > 0.15) {
-            const t = state.clock.getElapsedTime();
-            const wobbleRate = Math.min(22, Math.max(5, rotSpeed * 2.5));
-            
-            const wobbleX = 1 + Math.sin(t * wobbleRate) * 0.12 * wobbleIntensity;
-            const wobbleY = 1 + Math.cos(t * wobbleRate * 1.3) * 0.12 * wobbleIntensity;
-            const wobbleZ = 1 + Math.sin(t * wobbleRate * 0.8) * 0.12 * wobbleIntensity;
-            meshGroupRef.current.scale.set(wobbleX, wobbleY, wobbleZ);
-
-            const nowMs = performance.now();
-            if (nowMs - lastWobbleTime.current > 110) {
-                soundEngine.playSpinningObjectWobble(rotSpeed, obj.hue, obj.size, obj.type);
-                lastWobbleTime.current = nowMs;
-            }
-        } else {
-            meshGroupRef.current.scale.set(1, 1, 1);
         }
     });
 
     const triggerUserWobbleImpulse = () => {
-        if (isPaused || isShattered) return;
-        if (rbRef.current) {
-            rbRef.current.applyImpulse({ x: (Math.random() - 0.5) * 8, y: 12, z: (Math.random() - 0.5) * 8 }, true);
-            rbRef.current.applyTorqueImpulse({ x: Math.random() * 15, y: Math.random() * 15, z: Math.random() * 15 }, true);
-            soundEngine.playWobbleResonance(0.9, 14, obj.hue, obj.size, obj.type);
-            triggerHapticFeedback([25, 20, 25]);
-            triggerShockwave(1.8);
-            takeDamage(12);
-            onObjectRammed();
-        }
+        if (isPaused || isShattered || !rbRef.current) return;
+        rbRef.current.applyImpulse({ x: (Math.random() - 0.5) * 8, y: 12, z: (Math.random() - 0.5) * 8 }, true);
+        soundEngine.playWobbleResonance(0.9, 14, obj.hue, obj.size, obj.type);
+        triggerHapticFeedback([25, 20, 25]);
+        triggerShockwave(1.8);
+        takeDamage(12);
+        onObjectRammed();
     };
 
-    const healthRatio = Math.max(0, Math.min(1, durability / maxDurability));
-    const healthColorHex = healthRatio > 0.6 ? '#10b981' : healthRatio > 0.25 ? '#f59e0b' : '#ef4444';
     const barWidth = Math.max(1.6, obj.size * 0.95);
     const barHeight = 0.16;
 
     return (
         <group>
+            {isShattered && <ShatterDebris size={obj.size} colorHex={obj.colorHex} type={obj.type} hue={obj.hue} />}
             <RigidBody 
                 ref={rbRef}
                 position={obj.position}
@@ -652,166 +479,74 @@ function SolidObjectItem({
                 friction={0.25}
                 onCollisionEnter={(evt: any) => {
                     if (isPaused || isShattered) return;
+                    const now = performance.now();
+                    if (now - lastCollisionTimeRef.current < 60) return;
+                    lastCollisionTimeRef.current = now;
+
                     const impulse = typeof evt?.totalImpulse === 'number' ? Math.abs(evt.totalImpulse) : 3.5;
                     const normVel = Math.min(10.0, Math.max(1.5, impulse));
-                    setTimeout(() => {
-                        if (isPaused || isShattered) return;
-                        const vibMs = Math.min(60, Math.max(15, Math.round(normVel * 6)));
-                        triggerHapticFeedback(vibMs);
-                        soundEngine.playSolidImpactSound(Math.max(2.5, normVel), obj.hue, obj.size, obj.mass, obj.type);
-                        soundEngine.playWobbleResonance(0.7, 12, obj.hue, obj.size, obj.type);
-                        triggerShockwave(Math.min(2.5, normVel));
-                        takeDamage(Math.max(8, Math.round(normVel * 8)));
-                        onObjectRammed();
-                    }, 0);
+                    const vibMs = Math.min(60, Math.max(15, Math.round(normVel * 6)));
+
+                    triggerHapticFeedback(vibMs);
+                    soundEngine.playSolidImpactSound(Math.max(2.5, normVel), obj.hue, obj.size, obj.mass, obj.type);
+                    soundEngine.playWobbleResonance(0.7, 12, obj.hue, obj.size, obj.type);
+                    triggerShockwave(Math.min(2.5, normVel));
+                    takeDamage(Math.max(8, Math.round(normVel * 8)));
+                    onObjectRammed();
                 }}
             >
-                {/* Static physics colliders */}
                 {obj.type === 'sphere' && <BallCollider args={[obj.size]} />}
                 {obj.type === 'box' && <CuboidCollider args={[obj.size / 2, obj.size / 2, obj.size / 2]} />}
                 {obj.type === 'torus' && <BallCollider args={[obj.size]} />}
 
                 <group ref={meshGroupRef} onClick={triggerUserWobbleImpulse} visible={!isShattered}>
-                    {/* Minimalist 3D Health Bar Overlay floating above high-mass object */}
                     <group position={[0, obj.size * 1.15 + 0.65, 0]} ref={healthBarRef}>
-                        {/* Dark background panel frame */}
                         <mesh position={[0, 0, 0]}>
                             <planeGeometry args={[barWidth + 0.1, barHeight + 0.08]} />
                             <meshBasicMaterial color="#020617" transparent opacity={0.85} />
                         </mesh>
-                        
-                        {/* Frame border accent glow */}
                         <mesh position={[0, 0, 0.001]}>
                             <planeGeometry args={[barWidth + 0.04, barHeight + 0.03]} />
-                            <meshBasicMaterial color={healthColorHex} transparent opacity={0.35} />
+                            <meshBasicMaterial color={obj.colorHex} transparent opacity={0.35} />
                         </mesh>
-
-                        {/* Health fill bar */}
-                        <mesh position={[-barWidth / 2 + (barWidth * healthRatio) / 2, 0, 0.002]}>
-                            <planeGeometry args={[Math.max(0.001, barWidth * healthRatio), barHeight]} />
-                            <meshBasicMaterial color={healthColorHex} transparent opacity={0.95} />
-                        </mesh>
-
-                        {/* Minimalist segmented tick dividers */}
-                        {[0.25, 0.5, 0.75].map((pct) => (
-                            <mesh key={pct} position={[-barWidth / 2 + barWidth * pct, 0, 0.003]}>
-                                <planeGeometry args={[0.018, barHeight + 0.03]} />
-                                <meshBasicMaterial color="#020617" transparent opacity={0.9} />
-                            </mesh>
-                        ))}
-
-                        {/* Mass indicator badge on top left */}
-                        <mesh position={[-barWidth / 2 - 0.12, 0, 0.003]}>
-                            <boxGeometry args={[0.12, 0.12, 0.02]} />
-                            <meshBasicMaterial color="#f59e0b" />
+                        <mesh ref={healthFillMeshRef} position={[-barWidth / 2, 0, 0.002]}>
+                            <planeGeometry args={[barWidth, barHeight]} />
+                            <meshBasicMaterial color={obj.colorHex} transparent opacity={0.95} />
                         </mesh>
                     </group>
 
-                    {shockwaves.map((sw) => {
-                        const currentScale = obj.size * 0.8 + (sw.maxScale - obj.size * 0.8) * sw.progress;
-                        const opacity = Math.max(0, (1 - sw.progress) * 0.95);
-                        return (
-                            <group key={sw.id}>
-                                <Ring 
-                                    args={[currentScale * 0.82, currentScale, 32]} 
-                                    rotation={[-Math.PI / 2, 0, 0]}
-                                >
-                                    <meshBasicMaterial 
-                                        color={sw.color} 
-                                        transparent 
-                                        opacity={opacity} 
-                                        side={THREE.DoubleSide} 
-                                    />
-                                </Ring>
-                                <Torus 
-                                    args={[currentScale * 0.7, Math.max(0.01, 0.1 * (1 - sw.progress)), 12, 24]} 
-                                    rotation={[0, 0, sw.progress * Math.PI]}
-                                >
-                                    <meshBasicMaterial 
-                                        color="#ffffff" 
-                                        transparent 
-                                        opacity={opacity * 0.85} 
-                                    />
-                                </Torus>
-                                {sw.progress < 0.65 && (
-                                    <DreiSparkles 
-                                        count={18} 
-                                        scale={currentScale * 1.3} 
-                                        size={4.0 * (1 - sw.progress)} 
-                                        speed={2.5} 
-                                        color={sw.color} 
-                                    />
-                                )}
-                            </group>
-                        );
-                    })}
-                    {isOrbitingState && (
-                        <group>
-                            <Torus args={[obj.size * 1.8, 0.12, 12, 24]} rotation={[Math.PI / 2, 0, 0]}>
-                                <meshBasicMaterial color="#fbbf24" transparent opacity={0.85} />
-                            </Torus>
+                    {shockwaveSlotsRef.current.map((_, idx) => (
+                        <group key={idx} ref={shockwaveGroupRefs[idx]} visible={false}>
+                            <Ring args={[0.5, 0.8, 24]} rotation={[-Math.PI / 2, 0, 0]}>
+                                <meshBasicMaterial ref={shockwaveMatRefs[idx]} color={obj.colorHex} transparent opacity={0.85} side={THREE.DoubleSide} depthWrite={false} />
+                            </Ring>
                         </group>
-                    )}
-                    {isOuterOrbitingState && (
-                        <group>
-                            <Torus args={[obj.size * 2.6, 0.2, 16, 32]} rotation={[Math.PI / 2, 0, 0]}>
-                                <meshBasicMaterial color="#f59e0b" transparent opacity={0.95} />
-                            </Torus>
-                            <Torus args={[obj.size * 3.4, 0.1, 16, 32]} rotation={[0, Math.PI / 2, 0]}>
-                                <meshBasicMaterial color="#38bdf8" transparent opacity={0.8} />
-                            </Torus>
-                        </group>
-                    )}
+                    ))}
+
                     {obj.type === 'sphere' && (
-                        <Sphere args={[obj.size, 16, 16]} castShadow receiveShadow>
-                            <meshStandardMaterial 
-                                color={isOrbitingState ? '#fbbf24' : obj.colorHex} 
-                                emissive={isOrbitingState ? '#f59e0b' : obj.colorHex} 
-                                emissiveIntensity={isOrbitingState ? 1.2 : 0.3} 
-                                metalness={0.7} 
-                                roughness={0.2} 
-                            />
+                        <Sphere args={[obj.size, 16, 16]}>
+                            <meshStandardMaterial color={obj.colorHex} metalness={0.8} roughness={0.2} />
                         </Sphere>
                     )}
                     {obj.type === 'box' && (
-                        <Box args={[obj.size, obj.size, obj.size]} castShadow receiveShadow>
-                            <meshStandardMaterial 
-                                color={isOrbitingState ? '#fbbf24' : obj.colorHex} 
-                                emissive={isOrbitingState ? '#f59e0b' : obj.colorHex} 
-                                emissiveIntensity={isOrbitingState ? 1.2 : 0.3} 
-                                metalness={0.6} 
-                                roughness={0.3} 
-                            />
+                        <Box args={[obj.size, obj.size, obj.size]}>
+                            <meshStandardMaterial color={obj.colorHex} metalness={0.7} roughness={0.3} />
                         </Box>
                     )}
                     {obj.type === 'torus' && (
-                        <Torus args={[obj.size, obj.size * 0.35, 12, 20]} castShadow receiveShadow>
-                            <meshStandardMaterial 
-                                color={isOrbitingState ? '#fbbf24' : obj.colorHex} 
-                                emissive={isOrbitingState ? '#f59e0b' : obj.colorHex} 
-                                emissiveIntensity={isOrbitingState ? 1.2 : 0.3} 
-                                metalness={0.8} 
-                                roughness={0.1} 
-                            />
+                        <Torus args={[obj.size, obj.size * 0.3, 12, 24]}>
+                            <meshStandardMaterial color={obj.colorHex} metalness={0.85} roughness={0.15} />
                         </Torus>
                     )}
                 </group>
             </RigidBody>
-
-            {/* Shatter explosion effect with animated debris shards in world space outside RigidBody */}
-            {isShattered && (
-                <group position={shatterPos}>
-                    <ShatterDebris size={obj.size} colorHex={obj.colorHex} type={obj.type} hue={obj.hue} />
-                </group>
-            )}
         </group>
     );
 }
 
 function SolidPhysicsObjects({ 
     objects, 
-    locusData,
-    onObjectRammed,
+        onObjectRammed,
     onKineticSling,
     onCoreImpact,
     isPaused = false,
@@ -819,7 +554,7 @@ function SolidPhysicsObjects({
     isShieldActive = true,
 }: { 
     objects: SolidPhysicsObjectData[]; 
-    locusData: { pos: THREE.Vector3 | null, isPulling: boolean };
+
     onObjectRammed: () => void;
     onKineticSling: (objType: string) => void;
     onCoreImpact?: (impactPos: THREE.Vector3, isSlung: boolean) => void;
@@ -833,8 +568,7 @@ function SolidPhysicsObjects({
                 <SolidObjectItem 
                     key={obj.id} 
                     obj={obj} 
-                    locusData={locusData} 
-                    onObjectRammed={onObjectRammed} 
+                                        onObjectRammed={onObjectRammed}
                     onKineticSling={onKineticSling} 
                     onCoreImpact={onCoreImpact}
                     isPaused={isPaused}
@@ -975,7 +709,7 @@ function InteractiveLocus({
     gestureRef,
     gestureControlMode,
 }: {
-    onPointerMove: (pos: THREE.Vector3 | null, isPulling: boolean, isMoving: boolean, moveVel: number) => void;
+    onPointerMove?: (pos: THREE.Vector3 | null, isPulling: boolean, isMoving: boolean, moveVel: number) => void;
     moveSpeedMultiplier?: number;
     onProtagonistCollision: () => void;
     onOuterOrbitDamage?: (damageAmount: number) => void;
@@ -998,7 +732,9 @@ function InteractiveLocus({
     const wobbleRingRef = useRef<THREE.Group>(null);
     const rbRef = useRef<any>(null);
     const lastBumpTime = useRef<number>(0);
-    const [bumpFlash, setBumpFlash] = useState(false);
+    const bumpFlashTimerRef = useRef(0);
+    const sphereMatRef = useRef<THREE.MeshStandardMaterial>(null);
+    const ringMatRef = useRef<THREE.MeshStandardMaterial>(null);
 
     const isOuterOrbitingRef = useRef<boolean>(false);
     const [isOuterOrbitingState, setIsOuterOrbitingState] = useState<boolean>(false);
@@ -1218,6 +954,16 @@ function InteractiveLocus({
             wobbleRingRef.current.rotation.z = Math.cos(clockTime * 2.8) * 0.45;
             wobbleRingRef.current.rotation.y = clockTime * 1.8;
         }
+
+        if (bumpFlashTimerRef.current > 0) {
+            bumpFlashTimerRef.current -= delta;
+        }
+        const isFlashing = bumpFlashTimerRef.current > 0;
+        if (sphereMatRef.current) {
+            sphereMatRef.current.color.set(isFlashing ? "#ffffff" : (isPulling ? "#facc15" : "#38bdf8"));
+            sphereMatRef.current.emissive.set(isFlashing ? "#38bdf8" : (isPulling ? "#eab308" : "#0284c7"));
+            sphereMatRef.current.emissiveIntensity = isFlashing ? 4.0 : (isPulling ? 2.5 : 1.0);
+        }
     });
 
     const handleProtagonistCollision = () => {
@@ -1226,18 +972,13 @@ function InteractiveLocus({
         if (now - lastBumpTime.current < 120) return;
         lastBumpTime.current = now;
 
-        setTimeout(() => {
-            if (isPaused) return;
-            const force = 4.0 + Math.random() * 3.5;
-            const vibMs = Math.min(80, Math.max(25, Math.round(force * 10)));
-            triggerHapticFeedback([vibMs, 20, Math.round(vibMs * 0.7)]);
-            soundEngine.playSolidImpactSound(force, 210, 1.3, 1.8, 'sphere');
-            soundEngine.playWobbleResonance(0.9, 14, 210, 1.3, 'sphere');
-            onProtagonistCollision();
-
-            setBumpFlash(true);
-            setTimeout(() => setBumpFlash(false), 120);
-        }, 0);
+        const force = 4.0 + Math.random() * 3.5;
+        const vibMs = Math.min(80, Math.max(25, Math.round(force * 10)));
+        triggerHapticFeedback([vibMs, 20, Math.round(vibMs * 0.7)]);
+        soundEngine.playSolidImpactSound(force, 210, 1.3, 1.8, 'sphere');
+        soundEngine.playWobbleResonance(0.9, 14, 210, 1.3, 'sphere');
+        onProtagonistCollision();
+        bumpFlashTimerRef.current = 0.15;
     };
 
     return (
@@ -1253,10 +994,7 @@ function InteractiveLocus({
             <BallCollider args={[1.8]} />
             <mesh ref={sphereRef} visible={active}>
                 <sphereGeometry args={[1.5, 16, 16]} />
-                <meshStandardMaterial 
-                    color={bumpFlash ? "#ffffff" : (isPulling ? "#facc15" : "#38bdf8")}
-                    emissive={bumpFlash ? "#38bdf8" : (isPulling ? "#eab308" : "#0284c7")}
-                    emissiveIntensity={bumpFlash ? 4.0 : (isPulling ? 2.5 : 1.0)}
+                <meshStandardMaterial ref={sphereMatRef}
                     transparent 
                     opacity={0.9}
                 />
@@ -1279,9 +1017,9 @@ function InteractiveLocus({
                     <group ref={wobbleRingRef} position={[0, 0, 0]}>
                         <Torus args={[2.2, 0.1, 12, 32]}>
                             <meshStandardMaterial 
-                                color={bumpFlash ? "#ffffff" : (isPulling ? "#fbbf24" : "#38bdf8")} 
-                                emissive={bumpFlash ? "#38bdf8" : (isPulling ? "#f59e0b" : "#0284c7")} 
-                                emissiveIntensity={bumpFlash ? 2.5 : 0.6}
+                                color={bumpFlashTimerRef.current > 0 ? "#ffffff" : (isPulling ? "#fbbf24" : "#38bdf8")}
+                                emissive={bumpFlashTimerRef.current > 0 ? "#38bdf8" : (isPulling ? "#f59e0b" : "#0284c7")}
+                                emissiveIntensity={bumpFlashTimerRef.current > 0 ? 2.5 : 0.6}
                                 roughness={0.15}
                                 metalness={0.85}
                             />
@@ -1292,9 +1030,9 @@ function InteractiveLocus({
                     <mesh ref={satelliteRef}>
                         <sphereGeometry args={[0.45, 12, 12]} />
                         <meshStandardMaterial 
-                            color={bumpFlash ? "#ffffff" : (isPulling ? "#f59e0b" : "#ec4899")} 
-                            emissive={bumpFlash ? "#ffffff" : (isPulling ? "#fbbf24" : "#d946ef")} 
-                            emissiveIntensity={bumpFlash ? 3.0 : 0.8} 
+                            color={bumpFlashTimerRef.current > 0 ? "#ffffff" : (isPulling ? "#f59e0b" : "#ec4899")}
+                            emissive={bumpFlashTimerRef.current > 0 ? "#ffffff" : (isPulling ? "#fbbf24" : "#d946ef")}
+                            emissiveIntensity={bumpFlashTimerRef.current > 0 ? 3.0 : 0.8}
                             roughness={0.1}
                         />
                     </mesh>
@@ -1303,9 +1041,9 @@ function InteractiveLocus({
                     <group position={[0, -0.8, 0]}>
                         <Ring args={[2.0, 2.5, 20]} rotation={[-Math.PI / 2, 0, 0]}>
                             <meshBasicMaterial 
-                                color={bumpFlash ? "#ffffff" : (isPulling ? "#fbbf24" : "#38bdf8")} 
+                                color={bumpFlashTimerRef.current > 0 ? "#ffffff" : (isPulling ? "#fbbf24" : "#38bdf8")}
                                 transparent 
-                                opacity={bumpFlash ? 0.95 : 0.5} 
+                                opacity={bumpFlashTimerRef.current > 0 ? 0.95 : 0.5}
                                 side={THREE.DoubleSide} 
                                 depthWrite={false}
                             />
@@ -1326,12 +1064,11 @@ const _locusIntersectTarget = new THREE.Vector3();
 // Fusion Particle Swarm Scene
 function FusionSwarmScene({ 
     gravityTilt, 
-    locusData,
-    onNodeAbsorbed,
+        onNodeAbsorbed,
     isPaused = false,
 }: { 
     gravityTilt: [number, number, number]; 
-    locusData: { pos: THREE.Vector3 | null, isPulling: boolean };
+
     onNodeAbsorbed: () => void;
     isPaused?: boolean;
 }) {
@@ -1383,7 +1120,7 @@ function FusionSwarmScene({
         let maxFusionStage = 0;
         let totalMass = 0;
 
-        soundEngine.updatePullDrone(locusData.isPulling, locusData.isPulling ? 1.0 : 0.0);
+        soundEngine.updatePullDrone(gameRefs.isPulling, gameRefs.isPulling ? 1.0 : 0.0);
 
         for (let i = 0; i < PARTICLE_COUNT; i++) {
             const p1 = particles[i];
@@ -1401,17 +1138,17 @@ function FusionSwarmScene({
             p1.velocity.x += gravityTilt[0] * effectiveDelta * 0.03;
             p1.velocity.z += gravityTilt[2] * effectiveDelta * 0.03;
 
-            if (locusData.pos) {
-                const distToLocus = p1.position.distanceTo(locusData.pos);
+            if (new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z)) {
+                const distToLocus = p1.position.distanceTo(new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z));
                 if (distToLocus < 45) {
-                    const pullStrength = locusData.isPulling ? 1.4 : 0.45;
+                    const pullStrength = gameRefs.isPulling ? 1.4 : 0.45;
                     const pullForce = (45 - distToLocus) * pullStrength * effectiveDelta * (1 / Math.max(1, p1.mass * 0.5));
                     
-                    _pDir.subVectors(locusData.pos, p1.position).normalize();
+                    _pDir.subVectors(new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z), p1.position).normalize();
                     p1.velocity.addScaledVector(_pDir, pullForce);
 
                     _pTangent.set(-_pDir.z, 0, _pDir.x);
-                    p1.velocity.addScaledVector(_pTangent, pullForce * (locusData.isPulling ? 0.8 : 0.3));
+                    p1.velocity.addScaledVector(_pTangent, pullForce * (gameRefs.isPulling ? 0.8 : 0.3));
 
                     if (distToLocus < 2.5) {
                         onNodeAbsorbed();
@@ -1759,8 +1496,8 @@ export default function App() {
 
     const locusPosRef = useRef<THREE.Vector3 | null>(null);
     useEffect(() => {
-        locusPosRef.current = locusData.pos;
-    }, [locusData.pos]);
+        locusPosRef.current = new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z);
+    }, [new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z)]);
 
     // Ground Charging Circles State
     const [groundRings] = useState([
@@ -2023,16 +1760,16 @@ export default function App() {
         if (temporalState.isRewinding) return '🌀 CHRONO TEMPORAL REWIND :: TIME INVERTED!';
         if (temporalState.timeScale === 0.25) return '⏱️ BULLET-TIME EVASIVE STASIS (0.25X)';
         if (temporalState.timeScale === 2.5) return '⏩ CHRONO OVERCLOCK (2.50X SPEED)';
-        if (!locusData.isPulling && !locusData.isMoving && locusData.moveVel < 0.05) {
+        if (!gameRefs.isPulling && !locusData.isMoving && locusData.moveVel < 0.05) {
             return '⚠️ IDLE DECAY :: GRAVITATIONAL COLLAPSE ACTIVE!';
         }
-        if (locusData.isPulling) return '🌊 WAVE FOLDING RESONANCE';
+        if (gameRefs.isPulling) return '🌊 WAVE FOLDING RESONANCE';
         if (playerStats.combo >= 4) return '🔮 FRACTAL XENON OVERDRIVE';
         if (impactPulse > 0) return '💠 TENSOR CLUSTER HARMONIC';
         if (itemDrops.length > 4) return '💎 HYDRA MATRIX CASCADE';
         if (shearGates.length > 2) return '🌀 BIFURCATION SHEAR FIELD';
         return '⚡ ALGORITHMIC SINGULARITY OVERLOAD';
-    }, [temporalState.isRewinding, temporalState.timeScale, locusData.isPulling, locusData.isMoving, locusData.moveVel, playerStats.combo, impactPulse, itemDrops.length, shearGates.length]);
+    }, [temporalState.isRewinding, temporalState.timeScale, gameRefs.isPulling, locusData.isMoving, locusData.moveVel, playerStats.combo, impactPulse, itemDrops.length, shearGates.length]);
 
     useEffect(() => {
         const loadSavedData = async () => {
@@ -2099,9 +1836,9 @@ export default function App() {
                 } else {
                     // Compute nearest hazard proximity to player locus
                     let minHazardDist = 999;
-                    if (locusData.pos) {
-                        const px = locusData.pos.x;
-                        const pz = locusData.pos.z;
+                    if (new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z)) {
+                        const px = new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).x;
+                        const pz = new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).z;
                         voidHazards.forEach((h) => {
                             const dx = h.position[0] - px;
                             const dz = h.position[2] - pz;
@@ -2110,7 +1847,7 @@ export default function App() {
                         });
                     }
 
-                    const isActive = locusData.isPulling || locusData.isMoving || locusData.moveVel > 0.05;
+                    const isActive = gameRefs.isPulling || locusData.isMoving || locusData.moveVel > 0.05;
 
                     if (minHazardDist < 8.0 && isActive) {
                         // Action 1: Bullet-Time Evasive Stasis when dodging in close hazard proximity
@@ -2154,7 +1891,7 @@ export default function App() {
             });
 
             setPlayerStats((prev) => {
-                const isActive = locusData.isPulling || locusData.isMoving || locusData.moveVel > 0.05;
+                const isActive = gameRefs.isPulling || locusData.isMoving || locusData.moveVel > 0.05;
 
                 let newShield = prev.shield;
                 let newCore = prev.coreIntegrity;
@@ -2184,7 +1921,7 @@ export default function App() {
         }, 200);
 
         return () => clearInterval(interval);
-    }, [gameState, isSectorBriefingOpen, isSectorCompleteModalOpen, showLeaderboard, locusData.isPulling, locusData.isMoving, locusData.moveVel, locusData.pos, voidHazards, playerStats.combo]);
+    }, [gameState, isSectorBriefingOpen, isSectorCompleteModalOpen, showLeaderboard, gameRefs.isPulling, locusData.isMoving, locusData.moveVel, new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z), voidHazards, playerStats.combo]);
 
     useEffect(() => {
         if (gameState !== 'playing' || isSectorBriefingOpen || isSectorCompleteModalOpen || showLeaderboard) return;
@@ -2416,7 +2153,7 @@ export default function App() {
             setVoidHazards([]);
             triggerFloatingText('💣 EMP SINGULARITY DETONATION!', 'text-purple-300 font-black');
             soundEngine.playSupernovaSound();
-            spawnSolidObject(locusData.pos ? [locusData.pos.x + (Math.random() - 0.5) * 10, 12, locusData.pos.z + (Math.random() - 0.5) * 10] : undefined);
+            spawnSolidObject(new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z) ? [new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).x + (Math.random() - 0.5) * 10, 12, new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).z + (Math.random() - 0.5) * 10] : undefined);
             addScoreAndXP(Math.round(500 * multiplier), Math.round(100 * multiplier));
         } else if (item.type === 'magnet') {
             setPlayerStats(prev => ({ ...prev, magnetRadius: prev.magnetRadius + (isOvercharged ? 20 : 12) }));
@@ -2424,7 +2161,7 @@ export default function App() {
             addScoreAndXP(Math.round(200 * multiplier), Math.round(50 * multiplier));
         } else if (item.type === 'nanite') {
             triggerFloatingText('💎 NANITE OVERCHARGE MATRIX LEVEL UP!', 'text-pink-300 font-black');
-            spawnSolidObject(locusData.pos ? [locusData.pos.x + (Math.random() - 0.5) * 10, 12, locusData.pos.z + (Math.random() - 0.5) * 10] : undefined);
+            spawnSolidObject(new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z) ? [new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).x + (Math.random() - 0.5) * 10, 12, new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).z + (Math.random() - 0.5) * 10] : undefined);
             addScoreAndXP(Math.round(1000 * multiplier), Math.round(120 * multiplier));
         }
     };
@@ -2491,9 +2228,9 @@ export default function App() {
         });
 
         // Gate rift materializes kinetic physics objects into gameplay
-        spawnSolidObject(locusData.pos ? [locusData.pos.x + (Math.random() - 0.5) * 10, 12, locusData.pos.z + (Math.random() - 0.5) * 10] : undefined);
+        spawnSolidObject(new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z) ? [new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).x + (Math.random() - 0.5) * 10, 12, new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).z + (Math.random() - 0.5) * 10] : undefined);
         if (isOvercharged) {
-            spawnSolidObject(locusData.pos ? [locusData.pos.x + (Math.random() - 0.5) * 14, 14, locusData.pos.z + (Math.random() - 0.5) * 14] : undefined);
+            spawnSolidObject(new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z) ? [new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).x + (Math.random() - 0.5) * 14, 14, new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).z + (Math.random() - 0.5) * 14] : undefined);
         }
 
         if (isOvercharged) {
@@ -2582,10 +2319,10 @@ export default function App() {
         // Vaporize any nearby void hazards caught in the launch wave
         setVoidHazards(hazards => {
             return hazards.filter(h => {
-                if (locusData.pos) {
-                    const dx = h.position[0] - locusData.pos.x;
-                    const dy = h.position[1] - locusData.pos.y;
-                    const dz = h.position[2] - locusData.pos.z;
+                if (new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z)) {
+                    const dx = h.position[0] - new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).x;
+                    const dy = h.position[1] - new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).y;
+                    const dz = h.position[2] - new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).z;
                     if (dx * dx + dy * dy + dz * dz < 484) {
                         triggerFloatingText('💥 VOID HAZARD VAPORIZED!', 'text-sky-300 font-bold');
                         return false;
@@ -2631,10 +2368,10 @@ export default function App() {
         // Vaporize nearby Void Hazards in Chronos Synchro shockwave
         setVoidHazards(hazards => {
             return hazards.filter(h => {
-                if (locusData.pos) {
-                    const dx = h.position[0] - locusData.pos.x;
-                    const dy = h.position[1] - locusData.pos.y;
-                    const dz = h.position[2] - locusData.pos.z;
+                if (new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z)) {
+                    const dx = h.position[0] - new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).x;
+                    const dy = h.position[1] - new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).y;
+                    const dz = h.position[2] - new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).z;
                     if (dx * dx + dy * dy + dz * dz < 400) {
                         triggerFloatingText('⚡ CHRONOS SHOCKWAVE DISRUPTED VOID HAZARD!', 'text-amber-300 font-bold');
                         return false;
@@ -2908,8 +2645,8 @@ export default function App() {
 
         const spawnPos: [number, number, number] = customPos 
             ? customPos
-            : (locusData.pos 
-                ? [locusData.pos.x + (Math.random() - 0.5) * 16, locusData.pos.y + 12 + Math.random() * 6, locusData.pos.z + (Math.random() - 0.5) * 16] 
+            : (new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z)
+                ? [new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).x + (Math.random() - 0.5) * 16, new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).y + 12 + Math.random() * 6, new THREE.Vector3(gameRefs.locusPos.x, 5, gameRefs.locusPos.z).z + (Math.random() - 0.5) * 16]
                 : [(Math.random() - 0.5) * 50, 18, (Math.random() - 0.5) * 50]);
 
         const newObj: SolidPhysicsObjectData = {
@@ -2931,50 +2668,23 @@ export default function App() {
     };
 
     useEffect(() => {
-
-        const handleMotion = (e: DeviceMotionEvent) => {
-            if (e.accelerationIncludingGravity) {
-                const { x, y } = e.accelerationIncludingGravity;
-                if (x !== null && y !== null) {
-                    setGravityTilt([
-                        Math.max(-12, Math.min(12, -x * 1.5)),
-                        -9.81,
-                        Math.max(-12, Math.min(12, y * 1.5))
-                    ]);
-                }
-            }
-        };
-
-        const handleFusionUpdate = (e: any) => {
-            setFusionMetrics(e.detail);
-        };
-
         const handleSupernova = () => {
             setSupernovaFlash(true);
             setTimeout(() => setSupernovaFlash(false), 800);
         };
 
-        const keys: Record<string, boolean> = {};
-        let frameId: number;
-
         const onKeyDown = (e: KeyboardEvent) => { 
-            keys[e.key.toLowerCase()] = true; 
             if (e.key.toLowerCase() === 'r' || e.code === 'KeyR') {
                 triggerManualChronoRewind();
             }
         };
-        const onKeyUp = (e: KeyboardEvent) => { keys[e.key.toLowerCase()] = false; };
 
-        window.addEventListener('fusion-update', handleFusionUpdate);
         window.addEventListener('supernova-detonation', handleSupernova);
         window.addEventListener('keydown', onKeyDown);
-        window.addEventListener('keyup', onKeyUp);
 
         return () => {
-            window.removeEventListener('fusion-update', handleFusionUpdate);
             window.removeEventListener('supernova-detonation', handleSupernova);
             window.removeEventListener('keydown', onKeyDown);
-            window.removeEventListener('keyup', onKeyUp);
         };
     }, []);
 
@@ -3191,14 +2901,12 @@ export default function App() {
                 <Physics gravity={[0, -9.81, 0]} timeStep={1 / 60} paused={isGamePaused}>
                     <FusionSwarmScene 
                         gravityTilt={[0, -9.81, 0]}
-                        locusData={locusData} 
-                        onNodeAbsorbed={handleNodeAbsorbed} 
+                                                onNodeAbsorbed={handleNodeAbsorbed}
                         isPaused={isGamePaused}
                     />
                     <SolidPhysicsObjects 
                         objects={solidObjects} 
-                        locusData={locusData} 
-                        onObjectRammed={handleObjectRammed} 
+                                                onObjectRammed={handleObjectRammed}
                         onKineticSling={handleKineticSling} 
                         onCoreImpact={handleCoreImpact}
                         isPaused={isGamePaused}
@@ -3509,67 +3217,8 @@ export default function App() {
             )}
 
             {/* SECTOR BRIEFING MODAL */}
-            {isSectorBriefingOpen && (
-                <SectorBriefingModal
-                    sectorDef={currentSectorDef}
-                    onStartSector={() => setIsSectorBriefingOpen(false)}
-                />
-            )}
+            <React.Suspense fallback={null}>
 
-            {/* SECTOR COMPLETE MODAL */}
-            {isSectorCompleteModalOpen && (
-                <SectorCompleteModal 
-                    currentSectorDef={currentSectorDef}
-                    nextSectorDef={nextSectorDef}
-                    sectorProgress={sectorProgress}
-                    bonusXP={300}
-                    bonusScore={2500}
-                    augmentRewardOptions={sectorRewardOptions}
-                    onSelectRewardAndAdvance={handleAdvanceToNextSector}
-                />
-            )}
-
-            {/* GAME OVER OVERLAY MODAL */}
-            {gameState === 'gameover' && (
-                <GameOverModal 
-                    score={playerStats.score}
-                    level={playerStats.level}
-                    highestCombo={playerStats.highestCombo}
-                    highScore={playerStats.highScore}
-                    isNewHighScore={playerStats.score >= playerStats.highScore}
-                    initialCallsign={callsign}
-                    onRestart={restartGame}
-                    onSubmitScore={handleSubmitScore}
-                />
-            )}
-
-            {/* LEADERBOARDS MODAL */}
-            {showLeaderboard && (
-                <LeaderboardModal 
-                    leaderboard={leaderboard}
-                    userHighScore={playerStats.highScore}
-                    userLevel={playerStats.level}
-                    userCallsign={callsign}
-                    onClose={() => setShowLeaderboard(false)}
-                />
-            )}
-
-            {/* QUANTUM VAULT & CYBER-STORE MODAL */}
-            {showQuantumVault && (
-                <QuantumVaultModal 
-                    score={playerStats.score}
-                    playerCredits={playerCredits}
-                    onPurchaseItem={handlePurchaseItem}
-                    onClose={() => setShowQuantumVault(false)}
-                />
-            )}
-
-            {/* LORE BRIEFING MODAL */}
-            {showLoreBriefing && (
-                <LoreBriefingModal 
-                    onClose={() => setShowLoreBriefing(false)}
-                />
-            )}
-        </div>
+</React.Suspense></div>
     );
 }

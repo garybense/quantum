@@ -64,15 +64,7 @@ export function GroundChargerRings({
                     <group key={ring.id} position={ring.position}>
                         {/* Outer Glowing Floor Ring */}
                         <Ring args={[ring.radius, ring.radius + 0.6, 24]} rotation={[-Math.PI / 2, 0, 0]}>
-                            <meshStandardMaterial 
-                                color={colorHex} 
-                                emissive={emissiveHex} 
-                                emissiveIntensity={isPlayerInside ? 3.5 : 1.8} 
-                                transparent 
-                                opacity={isPlayerInside ? 0.9 : 0.6}
-                                side={THREE.DoubleSide}
-                                depthWrite={false}
-                            />
+                            <meshBasicMaterial color={colorHex} transparent opacity={isPlayerInside ? 0.9 : 0.6} side={THREE.DoubleSide} depthWrite={false} />
                         </Ring>
 
                         {/* Inner Concentric Pulse Ring */}

@@ -2,15 +2,15 @@ import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
-import { ChronosSynchroMesh } from './ChronosSynchroMesh';
-import { QuantumResonanceRelay } from './QuantumResonanceRelay';
-import { XenonIonVortex } from './XenonIonVortex';
-import { PlanetaryGearboxVortex } from './PlanetaryGearboxVortex';
-import { HyperArcConduitVortex } from './HyperArcConduitVortex';
-import { HydraFractalCoreVortex } from './HydraFractalCoreVortex';
-import { AetherHarmonicOrreryVortex } from './AetherHarmonicOrreryVortex';
-import { RiemannianFoldVortex } from './RiemannianFoldVortex';
-import { ChronosOmniDifferentialVortex } from './ChronosOmniDifferentialVortex';
+const ChronosSynchroMesh = React.lazy(() => import('./ChronosSynchroMesh').then(m => ({ default: m.ChronosSynchroMesh })));
+const QuantumResonanceRelay = React.lazy(() => import('./QuantumResonanceRelay').then(m => ({ default: m.QuantumResonanceRelay })));
+const XenonIonVortex = React.lazy(() => import('./XenonIonVortex').then(m => ({ default: m.XenonIonVortex })));
+const PlanetaryGearboxVortex = React.lazy(() => import('./PlanetaryGearboxVortex').then(m => ({ default: m.PlanetaryGearboxVortex })));
+const HyperArcConduitVortex = React.lazy(() => import('./HyperArcConduitVortex').then(m => ({ default: m.HyperArcConduitVortex })));
+const HydraFractalCoreVortex = React.lazy(() => import('./HydraFractalCoreVortex').then(m => ({ default: m.HydraFractalCoreVortex })));
+const AetherHarmonicOrreryVortex = React.lazy(() => import('./AetherHarmonicOrreryVortex').then(m => ({ default: m.AetherHarmonicOrreryVortex })));
+const RiemannianFoldVortex = React.lazy(() => import('./RiemannianFoldVortex').then(m => ({ default: m.RiemannianFoldVortex })));
+const ChronosOmniDifferentialVortex = React.lazy(() => import('./ChronosOmniDifferentialVortex').then(m => ({ default: m.ChronosOmniDifferentialVortex })));
 
 const RINGS_COUNT = 3;
 const MAX_DEPTH_FRACTAL = 2;
@@ -1286,10 +1286,8 @@ export function FractalSingularity({
                         <group key={k} rotation={[0, (Math.PI / 2) * k, 0]}>
                             <mesh position={[28, 5, 0]} rotation={[0, 0, Math.PI / 2]}>
                                 <cylinderGeometry args={[0.5, 1.6, 52, 16]} />
-                                <meshStandardMaterial 
+                                <meshBasicMaterial
                                     color="#f59e0b" 
-                                    emissive="#fbbf24" 
-                                    emissiveIntensity={3.0} 
                                     transparent 
                                     opacity={0.6} 
                                     wireframe
@@ -1298,92 +1296,18 @@ export function FractalSingularity({
                         </group>
                     ))}
                 </group>
-
-                {/* Eq 2: Non-Euclidean Interlocking Central Arcs */}
-                {showBifurcation && (
-                    <group ref={centralArcsGroupRef}>
-                        {[0, 1, 2, 3].map((k) => (
-                            <mesh key={k} rotation={[Math.PI / 3, 0, (Math.PI / 2) * k]}>
-                                <torusGeometry args={[3.5 + k * 1.2, 0.25, 16, 32, Math.PI * 0.7]} />
-                                <meshStandardMaterial color="#9f1239" emissive="#f43f5e" emissiveIntensity={0.5} />
-                            </mesh>
-                        ))}
-                    </group>
-                )}
-
-                {/* Eq 3: High-Density Kinetic Center Counter-Rotating Orbiters */}
-                <group ref={kineticCenterOrbitersGroupRef}>
-                    {[0, 1, 2].map((k) => (
-                        <mesh key={k}>
-                            <sphereGeometry args={[0.55 - k * 0.08, 24, 24]} />
-                            <meshStandardMaterial color="#78350f" emissive="#fbbf24" emissiveIntensity={0.6} />
-                        </mesh>
-                    ))}
-                </group>
-
-                {/* Eq 4: Singular Hyper Core Arc */}
-                <mesh ref={hyperCoreArcRef} rotation={[Math.PI / 4, 0, 0]}>
-                    <torusGeometry args={[5, 0.4, 16, 32, Math.PI]} />
-                    <meshStandardMaterial color="#0369a1" emissive="#38bdf8" emissiveIntensity={0.5} />
-                </mesh>
-
-                {/* Eq 5: Non-Euclidean Hydra Counter-Rotating Core Triangles */}
-                <group ref={hydraTrianglesGroupRef}>
-                    {[0, 1, 2].map((j) => (
-                        <mesh key={j} position={[0, 0, 0]}>
-                            <coneGeometry args={[2.5, 4, 3]} />
-                            <meshStandardMaterial color="#6b21a8" emissive="#a855f7" emissiveIntensity={0.5} />
-                        </mesh>
-                    ))}
-                </group>
             </group>
 
-            {/* Eq 1: Kinetic Parametric Fractal Lines */}
+            {/* Main Decorative Line Geometry */}
             <lineSegments geometry={complexLineGeometry}>
                 <lineBasicMaterial vertexColors linewidth={2} transparent opacity={0.85} />
-            </lineSegments>
-
-            {/* Eq 2: Kinetic Fractal Xenon Lissajous Lines */}
-            <lineSegments geometry={xenonLineGeometry}>
-                <lineBasicMaterial vertexColors linewidth={2} transparent opacity={0.9} />
-            </lineSegments>
-
-            {/* Eq 3: Non-Linear Bending Bifurcation Fractal Core Lines */}
-            <lineSegments geometry={bifurcationLineGeometry}>
-                <lineBasicMaterial vertexColors linewidth={2.5} transparent opacity={0.9} />
-            </lineSegments>
-
-            {/* Eq 3: Quantum Interconnecting Threads */}
-            <lineSegments geometry={quantumThreadsGeometry}>
-                <lineBasicMaterial vertexColors linewidth={1.5} transparent opacity={0.6} />
-            </lineSegments>
-
-            {/* Eq 4: Recursive Hyper Arc Matrix Lines */}
-            <lineSegments geometry={hyperArcLineGeometry}>
-                <lineBasicMaterial vertexColors linewidth={2.5} transparent opacity={0.9} />
-            </lineSegments>
-
-            {/* Eq 5: Geometric Hydra 6-Fold Lines */}
-            <lineSegments geometry={hydraLineGeometry}>
-                <lineBasicMaterial vertexColors linewidth={2.5} transparent opacity={0.9} />
-            </lineSegments>
-
-            {/* Eq 6: Hyper-Riemannian Tensor-Cluster Plasma Lines */}
-            <lineSegments geometry={tensorLineGeometry}>
-                <lineBasicMaterial vertexColors linewidth={3} transparent opacity={0.95} />
             </lineSegments>
 
             {/* Outermost Giant Rotating Ring (3D Torus + Counter-Rotating Glyphic Halo) */}
             <group position={[0, 0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
                 <mesh ref={outerRingRef}>
                     <torusGeometry args={[52, 0.7, 16, 96]} />
-                    <meshStandardMaterial 
-                        color="#0f172a" 
-                        emissive="#38bdf8" 
-                        emissiveIntensity={0.5} 
-                        roughness={0.2}
-                        metalness={0.8}
-                    />
+                    <meshLambertMaterial color="#0f172a" emissive="#38bdf8" emissiveIntensity={0.5} />
                 </mesh>
                 <mesh ref={outerSecondaryRingRef}>
                     <ringGeometry args={[53.8, 55.2, 64]} />
@@ -1391,212 +1315,124 @@ export function FractalSingularity({
                 </mesh>
             </group>
 
-            {/* Eq 2: External Kinetic Boundary Geometric Teeth Rim (12 segments) */}
-            {showInterference && (
-                <group ref={kineticTeethGroupRef}>
-                    {Array.from({ length: 12 }).map((_, i) => (
-                        <mesh key={i}>
-                            <boxGeometry args={[0.8, 1.5, 0.8]} />
-                            <meshStandardMaterial color="#0369a1" emissive="#38bdf8" emissiveIntensity={0.4} />
-                        </mesh>
-                    ))}
-                </group>
-            )}
-
-            {/* Eq 3: Event Horizon Perimeter Nodes (12 segments) */}
-            {showXenon && (
-                <group ref={eventHorizonNodesGroupRef}>
-                    {Array.from({ length: 6 }).map((_, j) => (
-                        <mesh key={j}>
-                            <sphereGeometry args={[1.1, 10, 10]} />
-                            <meshStandardMaterial color="#9f1239" emissive="#f43f5e" emissiveIntensity={0.5} />
-                        </mesh>
-                    ))}
-                </group>
-            )}
-
-            {/* Eq 4: Hyper Arc Horizon Nodes */}
-            {showHyperArc && (
-                <group ref={hyperArcNodesGroupRef}>
-                    {Array.from({ length: 6 }).map((_, j) => (
-                        <mesh key={j}>
-                            <sphereGeometry args={[1.3, 10, 10]} />
-                            <meshStandardMaterial color="#0369a1" emissive="#38bdf8" emissiveIntensity={0.5} />
-                        </mesh>
-                    ))}
-                </group>
-            )}
-
-            {/* Eq 5: Geometric Hydra Orbiting Particles */}
-            {showHydra && (
-                <group ref={hydraParticlesGroupRef}>
-                    {Array.from({ length: 4 }).map((_, i) => (
-                        <mesh key={i}>
-                            <sphereGeometry args={[1.4, 10, 10]} />
-                            <meshStandardMaterial color="#831843" emissive="#ec4899" emissiveIntensity={0.6} />
-                        </mesh>
-                    ))}
-                </group>
-            )}
-
-            {/* Eq 6: Hyper-Riemannian Tensor Polyhedral Nodes */}
-            {showTensor && (
-                <>
-                    <group ref={tensorNodesGroupRef}>
-                        {Array.from({ length: 14 }).map((_, i) => (
-                            <mesh key={i}>
-                                <boxGeometry args={[1.8, 1.8, 1.8]} />
-                                <meshStandardMaterial color="#0e7490" emissive="#06b6d4" emissiveIntensity={0.5} />
-                            </mesh>
-                        ))}
-                    </group>
-
-                    <group ref={tensorCollisionSpheresGroupRef}>
-                        {Array.from({ length: 12 }).map((_, i) => (
-                            <mesh key={i}>
-                                <sphereGeometry args={[1.2, 10, 10]} />
-                                <meshStandardMaterial color="#78350f" emissive="#f59e0b" emissiveIntensity={0.6} />
-                            </mesh>
-                        ))}
-                    </group>
-
-                    <mesh ref={tensorEventHorizonTorusRef} position={[0, 5, 0]}>
-                        <torusGeometry args={[38, 1.6, 3, 32]} />
-                        <meshStandardMaterial color="#581c87" emissive="#a855f7" emissiveIntensity={0.5} />
-                    </mesh>
-
-                    <mesh ref={tensorInnerPulseCylinderRef} position={[0, 5, 0]}>
-                        <cylinderGeometry args={[1.8, 1.8, 15, 3]} />
-                        <meshStandardMaterial color="#0284c7" emissive="#38bdf8" emissiveIntensity={0.6} />
-                    </mesh>
-                </>
-            )}
-
-            {/* CHRONOS SYNCHRO-MESH ALGORITHM LAYER */}
-            <ChronosSynchroMesh 
-                locusPos={locusPos}
-                isPulling={isPulling}
-                timeScale={timeScale}
-                isRewinding={isRewinding}
-                onAlignSatellites={onAlignSatellites}
-                active={mode === 'chronos'}
-                isPaused={isPaused}
-                subsystem1Power={subsystem1Power}
-                subsystem2Power={subsystem2Power}
-                subsystem3Power={subsystem3Power}
-            />
-
-            {/* QUANTUM RESONANCE RELAY ALGORITHM LAYER (SECTOR 3) */}
-            <QuantumResonanceRelay 
-                locusPos={locusPos}
-                isPulling={isPulling}
-                timeScale={timeScale}
-                isRewinding={isRewinding}
-                onAlignSatellites={onAlignSatellites}
-                active={mode === 'quantumRelay'}
-                isPaused={isPaused}
-                subsystem1Power={subsystem1Power}
-                subsystem2Power={subsystem2Power}
-                subsystem3Power={subsystem3Power}
-            />
-
-            {/* XENON ION VORTEX ALGORITHM LAYER (SECTOR 4) */}
-            <XenonIonVortex 
-                locusPos={locusPos}
-                isPulling={isPulling}
-                timeScale={timeScale}
-                isRewinding={isRewinding}
-                onAlignSatellites={onAlignSatellites}
-                active={mode === 'xenon'}
-                isPaused={isPaused}
-                subsystem1Power={subsystem1Power}
-                subsystem2Power={subsystem2Power}
-                subsystem3Power={subsystem3Power}
-            />
-
-            {/* PLANETARY GEARBOX VORTEX ALGORITHM LAYER (SECTOR 5) */}
-            <PlanetaryGearboxVortex 
-                locusPos={locusPos}
-                isPulling={isPulling}
-                timeScale={timeScale}
-                isRewinding={isRewinding}
-                onAlignSatellites={onAlignSatellites}
-                active={mode === 'planetaryGearbox'}
-                isPaused={isPaused}
-                subsystem1Power={subsystem1Power}
-                subsystem2Power={subsystem2Power}
-                subsystem3Power={subsystem3Power}
-            />
-
-            {/* HYPERARC CONDUIT VORTEX ALGORITHM LAYER (SECTOR 6) */}
-            <HyperArcConduitVortex 
-                locusPos={locusPos}
-                isPulling={isPulling}
-                timeScale={timeScale}
-                isRewinding={isRewinding}
-                onAlignSatellites={onAlignSatellites}
-                active={mode === 'hyperArcConduit'}
-                isPaused={isPaused}
-                subsystem1Power={subsystem1Power}
-                subsystem2Power={subsystem2Power}
-                subsystem3Power={subsystem3Power}
-            />
-
-            {/* HYDRA FRACTAL CORE VORTEX ALGORITHM LAYER (SECTOR 7) */}
-            <HydraFractalCoreVortex 
-                locusPos={locusPos}
-                isPulling={isPulling}
-                timeScale={timeScale}
-                isRewinding={isRewinding}
-                onAlignSatellites={onAlignSatellites}
-                active={mode === 'hydraFractalCore'}
-                isPaused={isPaused}
-                subsystem1Power={subsystem1Power}
-                subsystem2Power={subsystem2Power}
-                subsystem3Power={subsystem3Power}
-            />
-
-            {/* AETHER HARMONIC ORRERY VORTEX ALGORITHM LAYER (SECTOR 8) */}
-            <AetherHarmonicOrreryVortex 
-                locusPos={locusPos}
-                isPulling={isPulling}
-                timeScale={timeScale}
-                isRewinding={isRewinding}
-                onAlignSatellites={onAlignSatellites}
-                active={mode === 'aetherHarmonic'}
-                isPaused={isPaused}
-                subsystem1Power={subsystem1Power}
-                subsystem2Power={subsystem2Power}
-                subsystem3Power={subsystem3Power}
-            />
-
-            {/* RIEMANNIAN FOLD VORTEX ALGORITHM LAYER (SECTOR 9) */}
-            <RiemannianFoldVortex 
-                locusPos={locusPos}
-                isPulling={isPulling}
-                timeScale={timeScale}
-                isRewinding={isRewinding}
-                onAlignSatellites={onAlignSatellites}
-                active={mode === 'riemannianFold'}
-                isPaused={isPaused}
-                subsystem1Power={subsystem1Power}
-                subsystem2Power={subsystem2Power}
-                subsystem3Power={subsystem3Power}
-            />
-
-            {/* CHRONOS OMNI DIFFERENTIAL VORTEX ALGORITHM LAYER (SECTOR 10) */}
-            <ChronosOmniDifferentialVortex 
-                locusPos={locusPos}
-                isPulling={isPulling}
-                timeScale={timeScale}
-                isRewinding={isRewinding}
-                onAlignSatellites={onAlignSatellites}
-                active={mode === 'chronosOmni'}
-                isPaused={isPaused}
-                subsystem1Power={subsystem1Power}
-                subsystem2Power={subsystem2Power}
-                subsystem3Power={subsystem3Power}
-            />
-        </group>
+            <React.Suspense fallback={null}>
+                {mode === 'chronos' && (
+                    <ChronosSynchroMesh
+                        isPulling={isPulling}
+                        timeScale={timeScale}
+                        isRewinding={isRewinding}
+                        onAlignSatellites={onAlignSatellites}
+                        active={true}
+                        isPaused={isPaused}
+                        subsystem1Power={subsystem1Power}
+                        subsystem2Power={subsystem2Power}
+                        subsystem3Power={subsystem3Power}
+                    />
+                )}
+                {mode === 'quantumRelay' && (
+                    <QuantumResonanceRelay
+                        isPulling={isPulling}
+                        timeScale={timeScale}
+                        isRewinding={isRewinding}
+                        onAlignSatellites={onAlignSatellites}
+                        active={true}
+                        isPaused={isPaused}
+                        subsystem1Power={subsystem1Power}
+                        subsystem2Power={subsystem2Power}
+                        subsystem3Power={subsystem3Power}
+                    />
+                )}
+                {mode === 'xenon' && (
+                    <XenonIonVortex
+                        isPulling={isPulling}
+                        timeScale={timeScale}
+                        isRewinding={isRewinding}
+                        onAlignSatellites={onAlignSatellites}
+                        active={true}
+                        isPaused={isPaused}
+                        subsystem1Power={subsystem1Power}
+                        subsystem2Power={subsystem2Power}
+                        subsystem3Power={subsystem3Power}
+                    />
+                )}
+                {mode === 'planetaryGearbox' && (
+                    <PlanetaryGearboxVortex
+                        isPulling={isPulling}
+                        timeScale={timeScale}
+                        isRewinding={isRewinding}
+                        onAlignSatellites={onAlignSatellites}
+                        active={true}
+                        isPaused={isPaused}
+                        subsystem1Power={subsystem1Power}
+                        subsystem2Power={subsystem2Power}
+                        subsystem3Power={subsystem3Power}
+                    />
+                )}
+                {mode === 'hyperArcConduit' && (
+                    <HyperArcConduitVortex
+                        isPulling={isPulling}
+                        timeScale={timeScale}
+                        isRewinding={isRewinding}
+                        onAlignSatellites={onAlignSatellites}
+                        active={true}
+                        isPaused={isPaused}
+                        subsystem1Power={subsystem1Power}
+                        subsystem2Power={subsystem2Power}
+                        subsystem3Power={subsystem3Power}
+                    />
+                )}
+                {mode === 'hydraFractalCore' && (
+                    <HydraFractalCoreVortex
+                        isPulling={isPulling}
+                        timeScale={timeScale}
+                        isRewinding={isRewinding}
+                        onAlignSatellites={onAlignSatellites}
+                        active={true}
+                        isPaused={isPaused}
+                        subsystem1Power={subsystem1Power}
+                        subsystem2Power={subsystem2Power}
+                        subsystem3Power={subsystem3Power}
+                    />
+                )}
+                {mode === 'aetherHarmonic' && (
+                    <AetherHarmonicOrreryVortex
+                        isPulling={isPulling}
+                        timeScale={timeScale}
+                        isRewinding={isRewinding}
+                        onAlignSatellites={onAlignSatellites}
+                        active={true}
+                        isPaused={isPaused}
+                        subsystem1Power={subsystem1Power}
+                        subsystem2Power={subsystem2Power}
+                        subsystem3Power={subsystem3Power}
+                    />
+                )}
+                {mode === 'riemannianFold' && (
+                    <RiemannianFoldVortex
+                        isPulling={isPulling}
+                        timeScale={timeScale}
+                        isRewinding={isRewinding}
+                        onAlignSatellites={onAlignSatellites}
+                        active={true}
+                        isPaused={isPaused}
+                        subsystem1Power={subsystem1Power}
+                        subsystem2Power={subsystem2Power}
+                        subsystem3Power={subsystem3Power}
+                    />
+                )}
+                {mode === 'chronosOmni' && (
+                    <ChronosOmniDifferentialVortex
+                        isPulling={isPulling}
+                        timeScale={timeScale}
+                        isRewinding={isRewinding}
+                        onAlignSatellites={onAlignSatellites}
+                        active={true}
+                        isPaused={isPaused}
+                        subsystem1Power={subsystem1Power}
+                        subsystem2Power={subsystem2Power}
+                        subsystem3Power={subsystem3Power}
+                    />
+                )}
+            </React.Suspense></group>
     );
 }

@@ -113,7 +113,7 @@ class SoundEngine {
         };
     }
 
-    public playSolidImpactSound(force: number = 2.5) {
+    public playSolidImpactSound(force: number = 2.5, _hue?: number, _size?: number, _mass?: number, _type?: string) {
         if (!this.isInitialized || !this.ctx || this.isMuted) return;
         const now = this.ctx.currentTime;
         if (now - this.lastImpactTime < 0.08) return;
@@ -239,7 +239,7 @@ class SoundEngine {
         });
     }
 
-    public playItemPickupSound() {
+    public playItemPickupSound(_type?: string) {
         if (!this.isInitialized || !this.ctx || this.isMuted) return;
         const now = this.ctx.currentTime;
         const osc = this.ctx.createOscillator();
