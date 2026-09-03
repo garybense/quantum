@@ -1286,22 +1286,97 @@ export function FractalSingularity({
                         <group key={k} rotation={[0, (Math.PI / 2) * k, 0]}>
                             <mesh position={[28, 5, 0]} rotation={[0, 0, Math.PI / 2]}>
                                 <cylinderGeometry args={[0.5, 1.6, 52, 16]} />
-                                <meshBasicMaterial
-                                    color="#f59e0b" 
-                                    transparent 
-                                    opacity={0.6} 
-                                    wireframe
-                                />
+                                <meshBasicMaterial color="#f59e0b" transparent opacity={0.6} wireframe />
                             </mesh>
                         </group>
                     ))}
                 </group>
+
+                {/* Eq 2: Non-Euclidean Interlocking Central Arcs */}
+                {showBifurcation && (
+                    <group ref={centralArcsGroupRef}>
+                        {[0, 1, 2, 3].map((k) => (
+                            <mesh key={k} rotation={[Math.PI / 3, 0, (Math.PI / 2) * k]}>
+                                <torusGeometry args={[3.5 + k * 1.2, 0.25, 16, 32, Math.PI * 0.7]} />
+                                <meshLambertMaterial color="#9f1239" emissive="#f43f5e" emissiveIntensity={0.5} />
+                            </mesh>
+                        ))}
+                    </group>
+                )}
+
+                {/* Eq 3: High-Density Kinetic Center Counter-Rotating Orbiters */}
+                <group ref={kineticCenterOrbitersGroupRef}>
+                    {[0, 1, 2].map((k) => (
+                        <mesh key={k}>
+                            <sphereGeometry args={[0.55 - k * 0.08, 16, 16]} />
+                            <meshLambertMaterial color="#78350f" emissive="#fbbf24" emissiveIntensity={0.6} />
+                        </mesh>
+                    ))}
+                </group>
+
+                {/* Eq 4: Singular Hyper Core Arc */}
+                <mesh ref={hyperCoreArcRef} rotation={[Math.PI / 4, 0, 0]}>
+                    <torusGeometry args={[5, 0.4, 16, 32, Math.PI]} />
+                    <meshLambertMaterial color="#0369a1" emissive="#38bdf8" emissiveIntensity={0.5} />
+                </mesh>
+
+                {/* Eq 5: Non-Euclidean Hydra Counter-Rotating Core Triangles */}
+                <group ref={hydraTrianglesGroupRef}>
+                    {[0, 1, 2].map((j) => (
+                        <mesh key={j} position={[0, 0, 0]}>
+                            <coneGeometry args={[2.5, 4, 3]} />
+                            <meshLambertMaterial color="#6b21a8" emissive="#a855f7" emissiveIntensity={0.5} />
+                        </mesh>
+                    ))}
+                </group>
             </group>
 
-            {/* Main Decorative Line Geometry */}
+            {/* Eq 1: Kinetic Parametric Fractal Lines */}
             <lineSegments geometry={complexLineGeometry}>
                 <lineBasicMaterial vertexColors linewidth={2} transparent opacity={0.85} />
             </lineSegments>
+
+            {/* Eq 2: Kinetic Fractal Xenon Lissajous Lines */}
+            {showXenon && (
+                <lineSegments geometry={xenonLineGeometry}>
+                    <lineBasicMaterial vertexColors linewidth={2} transparent opacity={0.9} />
+                </lineSegments>
+            )}
+
+            {/* Eq 3: Non-Linear Bending Bifurcation Fractal Core Lines */}
+            {showBifurcation && (
+                <lineSegments geometry={bifurcationLineGeometry}>
+                    <lineBasicMaterial vertexColors linewidth={2.5} transparent opacity={0.9} />
+                </lineSegments>
+            )}
+
+            {/* Eq 3: Quantum Interconnecting Threads */}
+            {showBifurcation && (
+                <lineSegments geometry={quantumThreadsGeometry}>
+                    <lineBasicMaterial vertexColors linewidth={1.5} transparent opacity={0.6} />
+                </lineSegments>
+            )}
+
+            {/* Eq 4: Recursive Hyper Arc Matrix Lines */}
+            {showHyperArc && (
+                <lineSegments geometry={hyperArcLineGeometry}>
+                    <lineBasicMaterial vertexColors linewidth={2.5} transparent opacity={0.9} />
+                </lineSegments>
+            )}
+
+            {/* Eq 5: Geometric Hydra 6-Fold Lines */}
+            {showHydra && (
+                <lineSegments geometry={hydraLineGeometry}>
+                    <lineBasicMaterial vertexColors linewidth={2.5} transparent opacity={0.9} />
+                </lineSegments>
+            )}
+
+            {/* Eq 6: Hyper-Riemannian Tensor-Cluster Plasma Lines */}
+            {showTensor && (
+                <lineSegments geometry={tensorLineGeometry}>
+                    <lineBasicMaterial vertexColors linewidth={3} transparent opacity={0.95} />
+                </lineSegments>
+            )}
 
             {/* Outermost Giant Rotating Ring (3D Torus + Counter-Rotating Glyphic Halo) */}
             <group position={[0, 0.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
@@ -1315,7 +1390,88 @@ export function FractalSingularity({
                 </mesh>
             </group>
 
-            <React.Suspense fallback={null}>
+            {/* Eq 2: External Kinetic Boundary Geometric Teeth Rim (12 segments) */}
+            {showInterference && (
+                <group ref={kineticTeethGroupRef}>
+                    {Array.from({ length: 12 }).map((_, i) => (
+                        <mesh key={i}>
+                            <boxGeometry args={[0.8, 1.5, 0.8]} />
+                            <meshLambertMaterial color="#0369a1" emissive="#38bdf8" emissiveIntensity={0.4} />
+                        </mesh>
+                    ))}
+                </group>
+            )}
+
+            {/* Eq 3: Event Horizon Perimeter Nodes (12 segments) */}
+            {showXenon && (
+                <group ref={eventHorizonNodesGroupRef}>
+                    {Array.from({ length: 6 }).map((_, j) => (
+                        <mesh key={j}>
+                            <sphereGeometry args={[1.1, 10, 10]} />
+                            <meshLambertMaterial color="#9f1239" emissive="#f43f5e" emissiveIntensity={0.5} />
+                        </mesh>
+                    ))}
+                </group>
+            )}
+
+            {/* Eq 4: Hyper Arc Horizon Nodes */}
+            {showHyperArc && (
+                <group ref={hyperArcNodesGroupRef}>
+                    {Array.from({ length: 6 }).map((_, j) => (
+                        <mesh key={j}>
+                            <sphereGeometry args={[1.3, 10, 10]} />
+                            <meshLambertMaterial color="#0369a1" emissive="#38bdf8" emissiveIntensity={0.5} />
+                        </mesh>
+                    ))}
+                </group>
+            )}
+
+            {/* Eq 5: Geometric Hydra Orbiting Particles */}
+            {showHydra && (
+                <group ref={hydraParticlesGroupRef}>
+                    {Array.from({ length: 4 }).map((_, i) => (
+                        <mesh key={i}>
+                            <sphereGeometry args={[1.4, 10, 10]} />
+                            <meshLambertMaterial color="#831843" emissive="#ec4899" emissiveIntensity={0.6} />
+                        </mesh>
+                    ))}
+                </group>
+            )}
+
+            {/* Eq 6: Hyper-Riemannian Tensor Polyhedral Nodes */}
+            {showTensor && (
+                <>
+                    <group ref={tensorNodesGroupRef}>
+                        {Array.from({ length: 14 }).map((_, i) => (
+                            <mesh key={i}>
+                                <boxGeometry args={[1.8, 1.8, 1.8]} />
+                                <meshLambertMaterial color="#0e7490" emissive="#06b6d4" emissiveIntensity={0.5} />
+                            </mesh>
+                        ))}
+                    </group>
+
+                    <group ref={tensorCollisionSpheresGroupRef}>
+                        {Array.from({ length: 12 }).map((_, i) => (
+                            <mesh key={i}>
+                                <sphereGeometry args={[1.2, 10, 10]} />
+                                <meshLambertMaterial color="#78350f" emissive="#f59e0b" emissiveIntensity={0.6} />
+                            </mesh>
+                        ))}
+                    </group>
+
+                    <mesh ref={tensorEventHorizonTorusRef} position={[0, 5, 0]}>
+                        <torusGeometry args={[38, 1.6, 3, 32]} />
+                        <meshLambertMaterial color="#581c87" emissive="#a855f7" emissiveIntensity={0.5} />
+                    </mesh>
+
+                    <mesh ref={tensorInnerPulseCylinderRef} position={[0, 5, 0]}>
+                        <cylinderGeometry args={[1.8, 1.8, 15, 3]} />
+                        <meshLambertMaterial color="#0284c7" emissive="#38bdf8" emissiveIntensity={0.6} />
+                    </mesh>
+                </>
+            )}
+
+<React.Suspense fallback={null}>
                 {mode === 'chronos' && (
                     <ChronosSynchroMesh
                         isPulling={isPulling}
