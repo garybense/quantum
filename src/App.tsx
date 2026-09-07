@@ -2,7 +2,7 @@ import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react'
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Physics, RigidBody, CuboidCollider, BallCollider } from '@react-three/rapier';
 import { Box, Sphere, Ring, Torus, Sparkles as DreiSparkles } from '@react-three/drei';
-import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
+
 import * as THREE from 'three';
 import { motion, AnimatePresence } from 'motion/react';
 import { Volume2, VolumeX, Plus, RefreshCw, Zap, Shield, Trophy, Award, Flame, Sparkles, AlertTriangle, Cpu, Radio, Heart, Clock, FastForward, Pause, RotateCcw, Target, Compass, Move, Navigation, Smartphone, Sliders, ShoppingBag, Terminal } from 'lucide-react';
