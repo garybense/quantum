@@ -45,6 +45,44 @@ export interface OrbitSlot {
     solidId: number;
 }
 
+export interface ShieldPanelState {
+    id: number;
+    angleOffset: number;
+    span: number;
+    hp: number;
+    maxHp: number;
+    alive: boolean;
+    regenTimer: number;
+    scale: number;
+}
+
+export interface WarningArc {
+    id: number;
+    x: number;
+    z: number;
+    angle: number;
+    radius: number;
+    timer: number;
+    duration: number;
+    type: 'shockwave' | 'turret';
+    active: boolean;
+}
+
+export interface BossState {
+    ringRadius: number;
+    ringRotation: number;
+    spinSpeed: number;
+    coreHp: number;
+    maxCoreHp: number;
+    sectorLevel: number;
+    panels: ShieldPanelState[];
+    warningArcs: WarningArc[];
+    isVulnerable: boolean;
+    vulnerabilityTimer: number;
+    isEnraged: boolean;
+    slowmoTimer: number;
+}
+
 export interface SimState {
     marble: MarbleState;
     solids: SolidBody[];  // max 16
@@ -52,6 +90,7 @@ export interface SimState {
     hazards: HazardEntity[]; // max 16
     gates: GateEntity[];   // max 8
     orbitSlots: OrbitSlot[]; // max 4
+    boss: BossState;
 }
 
 export function createInitialState(): SimState {
@@ -93,6 +132,50 @@ export function createInitialState(): SimState {
         orbitSlots.push({ occupied: false, solidId: -1 });
     }
 
+    const panels: ShieldPanelState[] = [];
+    for (let i = 0; i < 6; i++) {
+        panels.push({
+            id: i,
+            angleOffset: (Math.PI * 2 / 6) * i,
+            span: (Math.PI * 2 / 6) * 0.85, // ~51 degrees arc
+            hp: 400,
+            maxHp: 400,
+            alive: true,
+            regenTimer: 0,
+            scale: 1.0,
+        });
+    }
+
+    const warningArcs: WarningArc[] = [];
+    for (let i = 0; i < 8; i++) {
+        warningArcs.push({
+            id: i,
+            x: 0,
+            z: 0,
+            angle: 0,
+            radius: 0,
+            timer: 0,
+            duration: 0.6,
+            type: 'shockwave',
+            active: false,
+        });
+    }
+
+    const boss: BossState = {
+        ringRadius: 9.5,
+        ringRotation: 0,
+        spinSpeed: 0.5,
+        coreHp: 1000,
+        maxCoreHp: 1000,
+        sectorLevel: 1,
+        panels,
+        warningArcs,
+        isVulnerable: false,
+        vulnerabilityTimer: 0,
+        isEnraged: false,
+        slowmoTimer: 0,
+    };
+
     return {
         marble: {
             x: 0,
@@ -109,6 +192,7 @@ export function createInitialState(): SimState {
         hazards,
         gates,
         orbitSlots,
+        boss,
     };
 }
 

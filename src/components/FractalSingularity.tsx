@@ -1,6 +1,7 @@
 import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { simState } from '../game/state';
 
 const ChronosSynchroMesh = React.lazy(() => import('./ChronosSynchroMesh').then(m => ({ default: m.ChronosSynchroMesh })));
 const QuantumResonanceRelay = React.lazy(() => import('./QuantumResonanceRelay').then(m => ({ default: m.QuantumResonanceRelay })));
@@ -111,6 +112,9 @@ export function FractalSingularity({
     const tensorEventHorizonTorusRef = useRef<THREE.Mesh>(null);
     const tensorInnerPulseCylinderRef = useRef<THREE.Mesh>(null);
     const inversionBeamGroupRef = useRef<THREE.Group>(null);
+
+    const shieldPanelsGroupRef = useRef<THREE.Group>(null);
+    const warningArcsGroupRef = useRef<THREE.Group>(null);
 
     const tempColor = useMemo(() => new THREE.Color(), []);
 
@@ -225,54 +229,86 @@ export function FractalSingularity({
             // Dynamic logic-driven emissive intensity: low/clean when idle, glowing during active events
             const dynamicCoreEmissive = 0.5 + (isPulling ? 1.5 : 0) + (impactPulse * 2.5) + (combo > 1 ? (combo - 1) * 0.15 : 0) + (isRewinding ? 1.2 : 0);
 
+            const boss = simState.boss;
             const mat1 = coreMeshRef1.current.material as THREE.MeshStandardMaterial;
             if (mat1 && mat1.emissive) {
-                mat1.emissive.setHSL(h1, 0.95, 0.6);
-                mat1.emissiveIntensity = dynamicCoreEmissive;
+                if (boss.isVulnerable) {
+                    mat1.emissive.set("#22d3ee");
+                    mat1.emissiveIntensity = dynamicCoreEmissive * 2.0;
+                } else {
+                    mat1.emissive.setHSL(h1, 0.95, 0.6);
+                    mat1.emissiveIntensity = dynamicCoreEmissive;
+                }
             }
             const mat2 = coreMeshRef2.current.material as THREE.MeshStandardMaterial;
             if (mat2 && mat2.emissive) {
-                mat2.emissive.setHSL(h2, 0.95, 0.7);
-                mat2.emissiveIntensity = dynamicCoreEmissive * 0.9;
+                if (boss.isVulnerable) {
+                    mat2.emissive.set("#34d399");
+                    mat2.emissiveIntensity = dynamicCoreEmissive * 2.0;
+                } else {
+                    mat2.emissive.setHSL(h2, 0.95, 0.7);
+                    mat2.emissiveIntensity = dynamicCoreEmissive * 0.9;
+                }
             }
             const mat3 = coreMeshRef3.current.material as THREE.MeshStandardMaterial;
             if (mat3 && mat3.emissive) {
-                mat3.emissive.setHSL(h3, 1.0, 0.9);
-                mat3.emissiveIntensity = dynamicCoreEmissive * 1.1;
+                if (boss.isVulnerable) {
+                    mat3.emissive.set("#06b6d4");
+                    mat3.emissiveIntensity = dynamicCoreEmissive * 2.5;
+                } else {
+                    mat3.emissive.setHSL(h3, 1.0, 0.9);
+                    mat3.emissiveIntensity = dynamicCoreEmissive * 1.1;
+                }
             }
         }
 
-        // Central Forcefield Shield Bubble Animation & Rotation
-        if (shieldBubbleRef.current && shieldWireframeRef.current && shieldRing1Ref.current && shieldRing2Ref.current) {
-            shieldBubbleRef.current.visible = isShieldActive;
-            shieldWireframeRef.current.visible = isShieldActive;
-            shieldRing1Ref.current.visible = isShieldActive;
-            shieldRing2Ref.current.visible = isShieldActive;
+        // Layered Destructible Shield Panels & Warning Arcs Update
+        const boss = simState.boss;
+        if (shieldPanelsGroupRef.current) {
+            const children = shieldPanelsGroupRef.current.children;
+            for (let i = 0; i < 6; i++) {
+                const mesh = children[i] as THREE.Mesh;
+                if (!mesh) continue;
+                const panel = boss.panels[i];
+                if (panel && panel.alive && panel.scale > 0.01) {
+                    mesh.visible = true;
+                    const angle = boss.ringRotation + panel.angleOffset;
+                    mesh.rotation.y = angle;
+                    mesh.scale.set(panel.scale, panel.scale, panel.scale);
 
-            if (isShieldActive) {
-                const sPulse = 1.0 + Math.sin(t * 4.0) * 0.04 + impactPulse * 0.15;
-                shieldBubbleRef.current.scale.setScalar(sPulse);
-                shieldWireframeRef.current.scale.setScalar(sPulse * 1.01);
-                
-                shieldWireframeRef.current.rotation.y = t * 1.2;
-                shieldWireframeRef.current.rotation.x = t * 0.8;
-
-                shieldRing1Ref.current.rotation.z = t * 2.5;
-                shieldRing1Ref.current.rotation.y = t * 1.5;
-
-                shieldRing2Ref.current.rotation.z = -t * 3.0;
-                shieldRing2Ref.current.rotation.x = t * 2.0;
-
-                const bubbleMat = shieldBubbleRef.current.material as THREE.MeshStandardMaterial;
-                if (bubbleMat && bubbleMat.emissive) {
-                    if (impactPulse > 0.5) {
-                        // Scorching crimson-red violent impact flash
-                        bubbleMat.emissive.setRGB(1.0, 0.05, 0.25);
-                        bubbleMat.emissiveIntensity = 5.0 + impactPulse * 10.0;
-                    } else {
-                        bubbleMat.emissive.setHSL((0.95 + Math.sin(t * 3.0) * 0.05) % 1, 0.95, 0.55);
-                        bubbleMat.emissiveIntensity = 2.0 + impactPulse * 3.0 + Math.sin(t * 8.0) * 0.5;
+                    const mat = mesh.material as THREE.MeshStandardMaterial;
+                    if (mat) {
+                        if (boss.isVulnerable) {
+                            mat.emissive.set("#22d3ee");
+                            mat.color.set("#0891b2");
+                        } else {
+                            mat.emissive.set("#f43f5e");
+                            mat.color.set("#e11d48");
+                        }
                     }
+                } else {
+                    mesh.visible = false;
+                }
+            }
+        }
+
+        if (warningArcsGroupRef.current) {
+            const children = warningArcsGroupRef.current.children;
+            for (let i = 0; i < boss.warningArcs.length; i++) {
+                const mesh = children[i] as THREE.Mesh;
+                if (!mesh) continue;
+                const arc = boss.warningArcs[i];
+                if (arc && arc.active) {
+                    mesh.visible = true;
+                    mesh.position.set(arc.x, 0.2, arc.z);
+                    const progress = Math.min(1.0, arc.timer / arc.duration);
+                    mesh.scale.setScalar(1.0 + progress * 0.5);
+                    const mat = mesh.material as THREE.MeshBasicMaterial;
+                    if (mat) {
+                        mat.opacity = 0.3 + progress * 0.5;
+                    }
+                } else {
+                    mesh.visible = false;
                 }
             }
         }
@@ -1253,32 +1289,32 @@ export function FractalSingularity({
                     <meshStandardMaterial color="#b45309" emissive="#fbbf24" emissiveIntensity={0.8} />
                 </mesh>
 
-                {/* HIGH-VISIBILITY FORCEFIELD SHIELD BUBBLE */}
-                <mesh ref={shieldBubbleRef}>
-                    <sphereGeometry args={[9.5, 32, 32]} />
-                    <meshStandardMaterial 
-                        color="#e11d48" 
-                        emissive="#f43f5e" 
-                        emissiveIntensity={2.2} 
-                        transparent 
-                        opacity={0.35} 
-                        roughness={0.1} 
-                        metalness={0.9} 
-                        side={THREE.DoubleSide}
-                    />
-                </mesh>
-                <mesh ref={shieldWireframeRef}>
-                    <sphereGeometry args={[9.6, 20, 20]} />
-                    <meshBasicMaterial color="#fb7185" wireframe transparent opacity={0.7} />
-                </mesh>
-                <mesh ref={shieldRing1Ref}>
-                    <torusGeometry args={[9.8, 0.35, 16, 64]} />
-                    <meshStandardMaterial color="#e11d48" emissive="#f43f5e" emissiveIntensity={3.0} />
-                </mesh>
-                <mesh ref={shieldRing2Ref} rotation={[Math.PI / 2, 0, 0]}>
-                    <torusGeometry args={[9.8, 0.35, 16, 64]} />
-                    <meshStandardMaterial color="#38bdf8" emissive="#0ea5e9" emissiveIntensity={3.0} />
-                </mesh>
+                {/* 6 Layered Destructible Shield Panels */}
+                <group ref={shieldPanelsGroupRef}>
+                    {[0, 1, 2, 3, 4, 5].map((i) => (
+                        <mesh key={i}>
+                            <cylinderGeometry args={[9.5, 9.5, 1.2, 16, 1, true, -((Math.PI * 2 / 6) * 0.85) / 2, (Math.PI * 2 / 6) * 0.85]} />
+                            <meshStandardMaterial
+                                color="#e11d48"
+                                emissive="#f43f5e"
+                                emissiveIntensity={2.5}
+                                side={THREE.DoubleSide}
+                                transparent
+                                opacity={0.85}
+                            />
+                        </mesh>
+                    ))}
+                </group>
+
+                {/* Telegraphed Red Warning Arcs */}
+                <group ref={warningArcsGroupRef}>
+                    {[0, 1, 2, 3, 4, 5, 6, 7].map((i) => (
+                        <mesh key={i} rotation={[-Math.PI / 2, 0, 0]}>
+                            <ringGeometry args={[2.0, 3.5, 32]} />
+                            <meshBasicMaterial color="#ef4444" transparent opacity={0.6} side={THREE.DoubleSide} />
+                        </mesh>
+                    ))}
+                </group>
 
                 {/* TACHYON GRAVITON INVERSION BEAM (Active when Shield is DOWN) */}
                 <group ref={inversionBeamGroupRef}>

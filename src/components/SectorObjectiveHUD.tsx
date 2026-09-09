@@ -124,11 +124,14 @@ export function SectorObjectiveHUD({
                             {/* MACHINE SUBSYSTEM MOTION STATES */}
                             <div className="pt-2 border-t border-slate-800 space-y-1.5">
                                 <div className="text-[10px] text-cyan-400 font-bold flex justify-between">
-                                    <span>⚙️ MACHINE SUBSYSTEM MOTIONS</span>
+                                    <span>⚙️ SUBSYSTEMS (SUPPRESS REGEN)</span>
                                     <span className={totalActiveSubsystems === 4 ? 'text-emerald-400 font-black' : 'text-amber-300'}>
                                         {totalActiveSubsystems}/4 ACTIVE
                                     </span>
                                 </div>
+                                <p className="text-[8.5px] text-cyan-200/80 leading-tight">
+                                    Each powered subsystem suppresses shield regeneration!
+                                </p>
 
                                 <div className="grid grid-cols-2 gap-1.5 text-[9.5px]">
                                     {/* Subsystem 1: Nodes */}
