@@ -19,7 +19,6 @@
     "@capacitor/preferences": "^6.0.4",
     "@react-three/drei": "^9.121.5",
     "@react-three/fiber": "^8.18.0",
-    "@react-three/rapier": "^1.5.0",
     "@tailwindcss/vite": "^4.1.14",
     "@types/react": "18.3.1",
     "@types/react-dom": "18.3.1",
