@@ -11,6 +11,9 @@ import { soundEngine } from './audio';
 import { RenderPerfStats } from './components/PerfOverlay';
 import { gameRefs } from './game/refs';
 import { sessionStore, useSessionStore } from './game/sessionStore';
+import { feelManager } from './game/feel';
+import { MARBLE_TUNING } from './game/tuning';
+import { simState } from './game/state';
 import { CoreHUD, ShieldHUD, LevelHUD, ScoreHUD, TimeScaleHUD, RewindButtonHUD } from './components/HUD';
 import { FractalSingularity, FractalAlgorithmMode } from './components/FractalSingularity';
 import { CyberItemsAndHazards } from './components/CyberItemsAndHazards';
@@ -580,18 +583,14 @@ function SolidPhysicsObjects({
     );
 }
 
-// Responsive Camera Rig Component: Auto-scales camera elevation, distance & FOV on vertical/phone screens + violent camera shake
-function ResponsiveCameraRig({ cameraShake = 0 }: { cameraShake?: number }) {
+// Responsive Camera Rig Component: Auto-scales camera elevation, distance & FOV on vertical/phone screens + screen shake
+function ResponsiveCameraRig() {
     const { camera, size } = useThree();
-    const shakeRef = useRef(0);
-
-    useEffect(() => {
-        if (cameraShake > 0) {
-            shakeRef.current = Math.max(shakeRef.current, cameraShake);
-        }
-    }, [cameraShake]);
 
     useFrame((_, delta) => {
+        feelManager.update(delta);
+        const shake = feelManager.getShake();
+
         const aspect = size.width / size.height;
         const baseAspect = 1.35;
         const scaleFactor = Math.max(1.0, baseAspect / Math.max(0.35, aspect));
@@ -600,11 +599,10 @@ function ResponsiveCameraRig({ cameraShake = 0 }: { cameraShake?: number }) {
         let targetZ = 75 * scaleFactor;
         let targetX = 0;
 
-        if (shakeRef.current > 0.01) {
-            targetX += (Math.random() - 0.5) * shakeRef.current * 7.5;
-            targetY += (Math.random() - 0.5) * shakeRef.current * 5.5;
-            targetZ += (Math.random() - 0.5) * shakeRef.current * 7.5;
-            shakeRef.current = THREE.MathUtils.damp(shakeRef.current, 0, 7.5, delta);
+        if (shake > 0.01) {
+            targetX += (Math.random() - 0.5) * shake * 7.5;
+            targetY += (Math.random() - 0.5) * shake * 5.5;
+            targetZ += (Math.random() - 0.5) * shake * 7.5;
         }
 
         camera.position.x = THREE.MathUtils.lerp(camera.position.x, targetX, 0.2);
@@ -727,7 +725,7 @@ function InteractiveLocus({
     const prevPos = useRef(new THREE.Vector3(0, 5, 0));
     const [active, setActive] = useState(true);
     const [isPulling, setIsPulling] = useState(false);
-    const sphereRef = useRef<THREE.Mesh>(null);
+    const sphereRef = useRef<THREE.Group>(null);
     const satelliteRef = useRef<THREE.Mesh>(null);
     const wobbleRingRef = useRef<THREE.Group>(null);
     const rbRef = useRef<any>(null);
@@ -929,42 +927,123 @@ function InteractiveLocus({
         }
 
         const clockTime = state.clock.getElapsedTime();
+        const carriedMass = simState.marble.carriedMass;
 
-        if (sphereRef.current) {
-            const pulse = 1 + Math.sin(clockTime * 8) * 0.18 + moveVel * 0.2;
-            sphereRef.current.scale.setScalar(pulse * (isPulling ? 1.8 : 1.2));
-            sphereRef.current.rotation.y = clockTime * 1.5;
-        }
+        // Weight-driven bobbing frequency
+        const bobFreq = 8.0 / (1.0 + carriedMass * MARBLE_TUNING.W_SPEED);
+        const bobY = Math.sin(clockTime * bobFreq) * 0.25;
 
-        // Wobble Orbiting Satellite Sphere that sticks to Protagonist
-        if (satelliteRef.current) {
-            const orbitSpeed = clockTime * 3.8;
-            const orbitRadius = 2.5 + Math.sin(orbitSpeed * 2.0) * 0.35;
-            satelliteRef.current.position.x = Math.cos(orbitSpeed) * orbitRadius;
-            satelliteRef.current.position.z = Math.sin(orbitSpeed) * orbitRadius;
-            satelliteRef.current.position.y = Math.sin(orbitSpeed * 3.2) * 0.95; // Dynamic 3D wobble elevation
-            
-            const satPulse = 1.0 + Math.sin(clockTime * 12.0) * 0.2;
-            satelliteRef.current.scale.setScalar(satPulse * (isPulling ? 1.5 : 1.0));
-        }
-
-        // Gyroscopic Wobble Aura Ring
-        if (wobbleRingRef.current) {
-            wobbleRingRef.current.rotation.x = Math.sin(clockTime * 2.2) * 0.45;
-            wobbleRingRef.current.rotation.z = Math.cos(clockTime * 2.8) * 0.45;
-            wobbleRingRef.current.rotation.y = clockTime * 1.8;
-        }
-
+        // Collection bounce Y-hop decay
         if (bumpFlashTimerRef.current > 0) {
             bumpFlashTimerRef.current -= delta;
         }
-        const isFlashing = bumpFlashTimerRef.current > 0;
-        if (sphereMatRef.current) {
-            sphereMatRef.current.color.set(isFlashing ? "#ffffff" : (isPulling ? "#facc15" : "#38bdf8"));
-            sphereMatRef.current.emissive.set(isFlashing ? "#38bdf8" : (isPulling ? "#eab308" : "#0284c7"));
-            sphereMatRef.current.emissiveIntensity = isFlashing ? 4.0 : (isPulling ? 2.5 : 1.0);
+
+        // Squash & Stretch calculation on render mesh
+        const speed = moveVel;
+        const stretchFactor = 1.0 + Math.min(0.4, speed * 0.015);
+        const squashFactor = 1.0 / Math.sqrt(stretchFactor);
+
+        if (sphereRef.current) {
+            sphereRef.current.position.y = bobY;
+            sphereRef.current.scale.set(squashFactor, squashFactor, stretchFactor);
+            if (speed > 0.1) {
+                const angle = Math.atan2(playerVelRef.current.y, playerVelRef.current.x);
+                sphereRef.current.rotation.y = -angle + Math.PI / 2;
+            }
+        }
+
+        // Trail updates
+        if (trailGeometry) {
+            const history = trailHistoryRef.current;
+            history.unshift({ x: locusPos.current.x, z: locusPos.current.z });
+            if (history.length > 25) history.pop();
+
+            const posArr = trailGeometry.attributes.position.array as Float32Array;
+            const baseWidth = 0.5 + carriedMass * 0.05;
+
+            for (let i = 0; i < history.length; i++) {
+                const p = history[i];
+                const prev = history[Math.max(0, i - 1)];
+                const next = history[Math.min(history.length - 1, i + 1)];
+
+                let dx = next.x - prev.x;
+                let dz = next.z - prev.z;
+                const len = Math.sqrt(dx * dx + dz * dz) || 1;
+                dx /= len; dz /= len;
+
+                const nx = -dz;
+                const nz = dx;
+
+                const factor = 1.0 - (i / 24);
+                const w = baseWidth * Math.max(0.1, factor);
+
+                posArr[i * 6] = p.x + nx * (w / 2);
+                posArr[i * 6 + 1] = 5.0;
+                posArr[i * 6 + 2] = p.z + nz * (w / 2);
+
+                posArr[i * 6 + 3] = p.x - nx * (w / 2);
+                posArr[i * 6 + 4] = 5.0;
+                posArr[i * 6 + 5] = p.z - nz * (w / 2);
+            }
+            trailGeometry.attributes.position.needsUpdate = true;
         }
     });
+
+    const trailHistoryRef = useRef<{ x: number; z: number }[]>([]);
+    const trailGeometry = useMemo(() => {
+        const geom = new THREE.BufferGeometry();
+        const positions = new Float32Array(50 * 3);
+        const colors = new Float32Array(50 * 3);
+        for (let i = 0; i <= 24; i++) {
+            const t = i / 24;
+            const r = THREE.MathUtils.lerp(1.0, 0.96, t);
+            const g = THREE.MathUtils.lerp(1.0, 0.62, t);
+            const b = THREE.MathUtils.lerp(1.0, 0.04, t);
+            colors[i * 6] = r; colors[i * 6 + 1] = g; colors[i * 6 + 2] = b;
+            colors[i * 6 + 3] = r; colors[i * 6 + 4] = g; colors[i * 6 + 5] = b;
+        }
+        geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        return geom;
+    }, []);
+
+    const heroFresnelMaterial = useMemo(() => {
+        return new THREE.ShaderMaterial({
+            uniforms: {
+                coreColor: { value: new THREE.Color("#ffffff") },
+                rimColor: { value: new THREE.Color("#fbbf24") },
+                fresnelPower: { value: 2.2 },
+                opacity: { value: 0.95 },
+            },
+            vertexShader: `
+                varying vec3 vNormal;
+                varying vec3 vViewPosition;
+                void main() {
+                    vNormal = normalize(normalMatrix * normal);
+                    vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+                    vViewPosition = -mvPosition.xyz;
+                    gl_Position = projectionMatrix * mvPosition;
+                }
+            `,
+            fragmentShader: `
+                varying vec3 vNormal;
+                varying vec3 vViewPosition;
+                uniform vec3 coreColor;
+                uniform vec3 rimColor;
+                uniform float fresnelPower;
+                uniform float opacity;
+                void main() {
+                    vec3 normal = normalize(vNormal);
+                    vec3 viewDir = normalize(vViewPosition);
+                    float fresnel = pow(1.0 - max(0.0, dot(normal, viewDir)), fresnelPower);
+                    vec3 finalColor = mix(coreColor, rimColor, fresnel);
+                    gl_FragColor = vec4(finalColor, opacity);
+                }
+            `,
+            transparent: true,
+            side: THREE.DoubleSide,
+        });
+    }, []);
 
     const handleProtagonistCollision = () => {
         if (isPaused) return;
@@ -973,10 +1052,8 @@ function InteractiveLocus({
         lastBumpTime.current = now;
 
         const force = 4.0 + Math.random() * 3.5;
-        const vibMs = Math.min(80, Math.max(25, Math.round(force * 10)));
-        triggerHapticFeedback([vibMs, 20, Math.round(vibMs * 0.7)]);
+        feelManager.requestShake(0.6);
         soundEngine.playSolidImpactSound(force, 210, 1.3, 1.8, 'sphere');
-        soundEngine.playWobbleResonance(0.9, 14, 210, 1.3, 'sphere');
         onProtagonistCollision();
         bumpFlashTimerRef.current = 0.15;
     };
@@ -992,65 +1069,29 @@ function InteractiveLocus({
             onCollisionEnter={handleProtagonistCollision}
         >
             <BallCollider args={[1.8]} />
-            <mesh ref={sphereRef} visible={active}>
-                <sphereGeometry args={[1.5, 16, 16]} />
-                <meshStandardMaterial ref={sphereMatRef}
-                    transparent 
-                    opacity={0.9}
-                />
+
+            {/* Preallocated Triangle Strip Ribbon Trail */}
+            <mesh geometry={trailGeometry}>
+                <meshBasicMaterial vertexColors transparent opacity={0.8} side={THREE.DoubleSide} />
             </mesh>
-            {active && (
-                <>
-                    {/* Outer Ring Gravity Capture Visual Halos */}
-                    {isOuterOrbitingState && (
-                        <group>
-                            <Torus args={[3.8, 0.22, 12, 24]} rotation={[Math.PI / 2, 0, 0]}>
-                                <meshBasicMaterial color="#f59e0b" transparent opacity={0.95} />
-                            </Torus>
-                            <Torus args={[4.8, 0.12, 12, 24]} rotation={[0, Math.PI / 2, 0]}>
-                                <meshBasicMaterial color="#38bdf8" transparent opacity={0.85} />
-                            </Torus>
-                        </group>
-                    )}
 
-                    {/* Wobble Gyroscopic Aura Torus Ring */}
-                    <group ref={wobbleRingRef} position={[0, 0, 0]}>
-                        <Torus args={[2.2, 0.1, 12, 32]}>
-                            <meshStandardMaterial 
-                                color={bumpFlashTimerRef.current > 0 ? "#ffffff" : (isPulling ? "#fbbf24" : "#38bdf8")}
-                                emissive={bumpFlashTimerRef.current > 0 ? "#38bdf8" : (isPulling ? "#f59e0b" : "#0284c7")}
-                                emissiveIntensity={bumpFlashTimerRef.current > 0 ? 2.5 : 0.6}
-                                roughness={0.15}
-                                metalness={0.85}
-                            />
-                        </Torus>
-                    </group>
-
-                    {/* Orbiting Wobble Satellite Sphere that sticks to Protagonist */}
-                    <mesh ref={satelliteRef}>
-                        <sphereGeometry args={[0.45, 12, 12]} />
-                        <meshStandardMaterial 
-                            color={bumpFlashTimerRef.current > 0 ? "#ffffff" : (isPulling ? "#f59e0b" : "#ec4899")}
-                            emissive={bumpFlashTimerRef.current > 0 ? "#ffffff" : (isPulling ? "#fbbf24" : "#d946ef")}
-                            emissiveIntensity={bumpFlashTimerRef.current > 0 ? 3.0 : 0.8}
-                            roughness={0.1}
-                        />
-                    </mesh>
-
-                    {/* Ground Plane Light Projection Disc */}
-                    <group position={[0, -0.8, 0]}>
-                        <Ring args={[2.0, 2.5, 20]} rotation={[-Math.PI / 2, 0, 0]}>
-                            <meshBasicMaterial 
-                                color={bumpFlashTimerRef.current > 0 ? "#ffffff" : (isPulling ? "#fbbf24" : "#38bdf8")}
-                                transparent 
-                                opacity={bumpFlashTimerRef.current > 0 ? 0.95 : 0.5}
-                                side={THREE.DoubleSide} 
-                                depthWrite={false}
-                            />
-                        </Ring>
-                    </group>
-                </>
-            )}
+            {/* Hero Marble: Inner White Core + Warm Amber Fresnel Rim Shell */}
+            <group ref={sphereRef} visible={active}>
+                {/* Inner White Emissive Core */}
+                <mesh>
+                    <sphereGeometry args={[1.2, 32, 32]} />
+                    <meshBasicMaterial color="#ffffff" />
+                </mesh>
+                {/* Thin Dark Shell with Warm Amber Fresnel Rim */}
+                <mesh material={heroFresnelMaterial}>
+                    <sphereGeometry args={[1.7, 32, 32]} />
+                </mesh>
+                {/* Ground Light Disc */}
+                <mesh position={[0, -1.65, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+                    <ringGeometry args={[0, 3.2, 32]} />
+                    <meshBasicMaterial color="#fbbf24" transparent opacity={0.35} side={THREE.DoubleSide} />
+                </mesh>
+            </group>
         </RigidBody>
     );
 }
@@ -2843,7 +2884,7 @@ export default function App() {
                 shadows={false}
                 camera={{ position: [0, 45, 75], fov: warpActive ? 120 : 45 }}
             >
-                <ResponsiveCameraRig cameraShake={cameraShake} />
+                <ResponsiveCameraRig />
                 <color attach="background" args={['#020617']} />
                 <fog attach="fog" args={['#020617', 80, 450]} />
 

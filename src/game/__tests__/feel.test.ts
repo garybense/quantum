@@ -3,7 +3,8 @@ import { createInitialState } from '../state';
 import { updateMarble, applyRecoilImpulse } from '../systems/marble';
 import { calculateOrbitRadius, calculateOrbitOmega, updateOrbit, launchOrbiter } from '../systems/orbit';
 import { reflectArenaWall } from '../physics';
-import { MARBLE_TUNING, ORBIT_TUNING } from '../tuning';
+import { MARBLE_TUNING, ORBIT_TUNING, SLING_TUNING, SHIELD_TUNING } from '../tuning';
+import { initBoss, damageShieldPanel, updateBoss } from '../systems/boss';
 
 describe('Feel tests per MASTER_SPEC section 8', () => {
     it('marble at rest reaches 90% v_max in expected timing', () => {
@@ -80,5 +81,45 @@ describe('Feel tests per MASTER_SPEC section 8', () => {
 
         expect(state.marble.vx).toBeCloseTo(10, 1);
         expect(state.marble.vz).toBeCloseTo(-10, 1);
+    });
+
+    it('shield panel dies to exactly 2 full-spin-up heavy hits in sector 1', () => {
+        const state = createInitialState();
+        initBoss(state, 1, 1000);
+
+        // Calculate damage of mass 15 orbiter launched at full spin-up (v ≈ 27.44)
+        const mass = 15;
+        const speed = 27.44;
+        const damage = 0.5 * mass * speed * speed * SLING_TUNING.DMG_K * SLING_TUNING.DMG_SCALE;
+
+        expect(state.boss.panels[0].alive).toBe(true);
+        expect(state.boss.panels[0].hp).toBe(SHIELD_TUNING.PANEL_HP_BASE); // 400
+
+        // First hit
+        damageShieldPanel(state, 0, damage, false);
+        expect(state.boss.panels[0].alive).toBe(true);
+        expect(state.boss.panels[0].hp).toBeLessThan(400);
+
+        // Second hit
+        damageShieldPanel(state, 0, damage, false);
+        expect(state.boss.panels[0].alive).toBe(false);
+        expect(state.boss.panels[0].hp).toBe(0);
+    });
+
+    it('core becomes vulnerable when 3 or more panels are destroyed', () => {
+        const state = createInitialState();
+        initBoss(state, 1, 1000);
+
+        expect(state.boss.isVulnerable).toBe(false);
+
+        damageShieldPanel(state, 0, 400, false);
+        damageShieldPanel(state, 1, 400, false);
+        updateBoss(state, 0.016, 4);
+        expect(state.boss.isVulnerable).toBe(false);
+
+        // Third panel death
+        damageShieldPanel(state, 2, 400, false);
+        updateBoss(state, 0.016, 4);
+        expect(state.boss.isVulnerable).toBe(true);
     });
 });
