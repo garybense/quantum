@@ -12,17 +12,18 @@ import { resolveCollisions, SimContactEvent } from '../game/systems/collisions';
 interface GameLoopProps {
     onEvents?: (events: SimContactEvent[]) => void;
     timeScale?: number;
-    shieldActive?: boolean;
+    subsystemsPowered?: number;
 }
 
-export const GameLoop: React.FC<GameLoopProps> = ({ onEvents, timeScale = 1.0, shieldActive = true }) => {
+export const GameLoop: React.FC<GameLoopProps> = ({ onEvents, timeScale = 1.0, subsystemsPowered = 4 }) => {
     useFrame((_, rawDt) => {
         const jx = gameRefs.joystickVector.active ? gameRefs.joystickVector.gx : 0;
         const jz = gameRefs.joystickVector.active ? gameRefs.joystickVector.gz : 0;
         const targetVx = jx * 34;
         const targetVz = jz * 34;
 
-        const dt = Math.min(rawDt, 0.05) * timeScale;
+        const effectiveTimeScale = simState.boss.slowmoTimer > 0 ? 0.85 * timeScale : timeScale;
+        const dt = Math.min(rawDt, 0.05) * effectiveTimeScale;
 
         updateMarble(simState, targetVx, targetVz, dt);
         updateSolids(simState, dt, gameRefs.isPulling);
@@ -30,7 +31,7 @@ export const GameLoop: React.FC<GameLoopProps> = ({ onEvents, timeScale = 1.0, s
         updateHazards(simState, dt);
         updateGates(simState, dt);
 
-        const events = resolveCollisions(simState, shieldActive);
+        const events = resolveCollisions(simState, dt, subsystemsPowered);
 
         if (events.length > 0 && onEvents) {
             onEvents(events);
