@@ -6,8 +6,8 @@ export const SECTOR_DEFINITIONS: SectorDefinition[] = [
         title: 'GRID SECTOR 1: NEURAL IGNITION',
         subtitle: 'Core Calibration & Sub-Grid Reconstruction',
         grandNarrative: 'THE RESTORATION OF THE CENTRAL GRID: Dark Void corruption has protected the central processing core behind a heavy spatial forcefield shield. You must collect Gates, Cyber Drops, Swarm Nodes, and build Combos to set the machine in motion, lower the shield, charge your kinetic ammo in ground rings, and fling objects to destroy the central core!',
-        description: 'Set machine subsystems in motion by reaching collection thresholds. Hover in ground charging rings to overcharge kinetic ammo and fling projectiles to destroy the Central Singularity Core.',
-        strategyTip: 'Collect 2 Gates, 3 Drops, 8 Nodes, and maintain a 2x Combo to unlock machine motion and lower the core shield! Hover in glowing ground circles to charge 3x Overcharge Ammo!',
+        description: 'Drag to steer your marble around the grid. Hold to spin up captured orbiters, and release to fire them at targets and the Central Singularity Core.',
+        strategyTip: 'Drag to steer across the arena. Hold to spin up orbiting shapes, and release to fire at the core! Taps fire revolver bursts when holding multiple orbiters.',
         unlockedStateChange: {
             systemName: 'PLASMA EMP DISCHARGE MATRIX',
             description: 'Unlocks automated hazard neutralization and shockwave discharge capability (+50% EMP Blast Radius).',

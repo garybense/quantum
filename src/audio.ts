@@ -320,6 +320,51 @@ class SoundEngine {
         osc.onended = () => { osc.disconnect(); g.disconnect(); };
     }
 
+
+    public playTargetLockTick() {
+        if (!this.isInitialized || !this.ctx || this.isMuted) return;
+        const now = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const g = this.getAvailableGain();
+        if (!g) return;
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(1200, now);
+        osc.frequency.exponentialRampToValueAtTime(1800, now + 0.04);
+        g.gain.cancelScheduledValues(now);
+        g.gain.setValueAtTime(0.18, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        osc.connect(g);
+        osc.start(now);
+        osc.stop(now + 0.05);
+        osc.onended = () => osc.disconnect();
+    }
+
+    public playPerfectSlingSound() {
+        if (!this.isInitialized || !this.ctx || this.isMuted) return;
+        const now = this.ctx.currentTime;
+        const osc1 = this.ctx.createOscillator();
+        const osc2 = this.ctx.createOscillator();
+        const g = this.getAvailableGain();
+        if (!g) return;
+        osc1.type = 'sine';
+        osc2.type = 'square';
+        osc1.frequency.setValueAtTime(440, now);
+        osc1.frequency.exponentialRampToValueAtTime(1760, now + 0.25);
+        osc2.frequency.setValueAtTime(880, now);
+        osc2.frequency.exponentialRampToValueAtTime(2640, now + 0.25);
+        g.gain.cancelScheduledValues(now);
+        g.gain.setValueAtTime(0.25, now);
+        g.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+        osc1.connect(g);
+        osc2.connect(g);
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + 0.28);
+        osc2.stop(now + 0.28);
+        osc1.onended = () => osc1.disconnect();
+        osc2.onended = () => osc2.disconnect();
+    }
+
     public playKineticSlingshotSound() {
         if (!this.isInitialized || !this.ctx || !this.isMuted) return;
         const now = this.ctx.currentTime;

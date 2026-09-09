@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createInitialState } from '../state';
 import { updateMarble, applyRecoilImpulse } from '../systems/marble';
-import { calculateOrbitRadius, calculateOrbitOmega, updateOrbit, launchOrbiter } from '../systems/orbit';
+import { calculateOrbitRadius, calculateOrbitOmega, updateOrbit, launchOrbiter, evaluateTracerLock } from '../systems/orbit';
 import { reflectArenaWall } from '../physics';
 import { MARBLE_TUNING, ORBIT_TUNING, SLING_TUNING, SHIELD_TUNING } from '../tuning';
 import { initBoss, damageShieldPanel, updateBoss } from '../systems/boss';
@@ -21,7 +21,41 @@ describe('Feel tests per MASTER_SPEC section 8', () => {
 
         expect(time).toBeGreaterThan(0.28);
         expect(time).toBeLessThan(0.34);
+
+    it('tracer line evaluates target lock when aimed at core gap or target', () => {
+        const state = createInitialState();
+        state.solids[0].mass = 5;
+        state.solids[0].active = true;
+        state.solids[0].x = 5;
+        state.solids[0].z = 5;
+        state.solids[0].vx = -15;
+        state.solids[0].vz = -15;
+        state.orbitSlots[0] = { occupied: true, solidId: 0 };
+        state.solids[0].orbitSlot = 0;
+
+        const lockState = evaluateTracerLock(state, false);
+        expect(lockState.hasOrbiter).toBe(true);
+        expect(lockState.isLocked).toBe(true);
     });
+
+    it('perfect release within 70ms window triggers critical hit', () => {
+        const state = createInitialState();
+        state.solids[0].mass = 10;
+        state.solids[0].active = true;
+        state.solids[0].x = 5;
+        state.solids[0].z = 5;
+        state.solids[0].vx = -15;
+        state.solids[0].vz = -15;
+        state.orbitSlots[0] = { occupied: true, solidId: 0 };
+        state.solids[0].orbitSlot = 0;
+
+        evaluateTracerLock(state, false);
+        const launch = launchOrbiter(state, 0);
+
+        expect(launch).not.toBeNull();
+        expect(launch!.isCrit).toBe(true);
+    });
+});
 
     it('heavy vs light orbit radius and omega values match spec mechanics', () => {
         const lightMass = 2;
@@ -39,7 +73,41 @@ describe('Feel tests per MASTER_SPEC section 8', () => {
         expect(omegaLight).toBeGreaterThan(omegaHeavy);
         expect(omegaLight).toBeCloseTo(8.63, 1);
         expect(omegaHeavy).toBeCloseTo(1.72, 1);
+
+    it('tracer line evaluates target lock when aimed at core gap or target', () => {
+        const state = createInitialState();
+        state.solids[0].mass = 5;
+        state.solids[0].active = true;
+        state.solids[0].x = 5;
+        state.solids[0].z = 5;
+        state.solids[0].vx = -15;
+        state.solids[0].vz = -15;
+        state.orbitSlots[0] = { occupied: true, solidId: 0 };
+        state.solids[0].orbitSlot = 0;
+
+        const lockState = evaluateTracerLock(state, false);
+        expect(lockState.hasOrbiter).toBe(true);
+        expect(lockState.isLocked).toBe(true);
     });
+
+    it('perfect release within 70ms window triggers critical hit', () => {
+        const state = createInitialState();
+        state.solids[0].mass = 10;
+        state.solids[0].active = true;
+        state.solids[0].x = 5;
+        state.solids[0].z = 5;
+        state.solids[0].vx = -15;
+        state.solids[0].vz = -15;
+        state.orbitSlots[0] = { occupied: true, solidId: 0 };
+        state.solids[0].orbitSlot = 0;
+
+        evaluateTracerLock(state, false);
+        const launch = launchOrbiter(state, 0);
+
+        expect(launch).not.toBeNull();
+        expect(launch!.isCrit).toBe(true);
+    });
+});
 
     it('mass 15 orbiter at full spin-up launches at expected velocity with tuning constants', () => {
         const state = createInitialState();
@@ -56,7 +124,41 @@ describe('Feel tests per MASTER_SPEC section 8', () => {
 
         const speed = Math.sqrt(launch!.vx * launch!.vx + launch!.vz * launch!.vz);
         expect(speed).toBeCloseTo(27.44, 1);
+
+    it('tracer line evaluates target lock when aimed at core gap or target', () => {
+        const state = createInitialState();
+        state.solids[0].mass = 5;
+        state.solids[0].active = true;
+        state.solids[0].x = 5;
+        state.solids[0].z = 5;
+        state.solids[0].vx = -15;
+        state.solids[0].vz = -15;
+        state.orbitSlots[0] = { occupied: true, solidId: 0 };
+        state.solids[0].orbitSlot = 0;
+
+        const lockState = evaluateTracerLock(state, false);
+        expect(lockState.hasOrbiter).toBe(true);
+        expect(lockState.isLocked).toBe(true);
     });
+
+    it('perfect release within 70ms window triggers critical hit', () => {
+        const state = createInitialState();
+        state.solids[0].mass = 10;
+        state.solids[0].active = true;
+        state.solids[0].x = 5;
+        state.solids[0].z = 5;
+        state.solids[0].vx = -15;
+        state.solids[0].vz = -15;
+        state.orbitSlots[0] = { occupied: true, solidId: 0 };
+        state.solids[0].orbitSlot = 0;
+
+        evaluateTracerLock(state, false);
+        const launch = launchOrbiter(state, 0);
+
+        expect(launch).not.toBeNull();
+        expect(launch!.isCrit).toBe(true);
+    });
+});
 
     it('recoil impulse correctly adjusts marble velocity', () => {
         const state = createInitialState();
@@ -67,7 +169,41 @@ describe('Feel tests per MASTER_SPEC section 8', () => {
 
         expect(state.marble.vx).toBeCloseTo(-5.25, 2);
         expect(state.marble.vz).toBe(0);
+
+    it('tracer line evaluates target lock when aimed at core gap or target', () => {
+        const state = createInitialState();
+        state.solids[0].mass = 5;
+        state.solids[0].active = true;
+        state.solids[0].x = 5;
+        state.solids[0].z = 5;
+        state.solids[0].vx = -15;
+        state.solids[0].vz = -15;
+        state.orbitSlots[0] = { occupied: true, solidId: 0 };
+        state.solids[0].orbitSlot = 0;
+
+        const lockState = evaluateTracerLock(state, false);
+        expect(lockState.hasOrbiter).toBe(true);
+        expect(lockState.isLocked).toBe(true);
     });
+
+    it('perfect release within 70ms window triggers critical hit', () => {
+        const state = createInitialState();
+        state.solids[0].mass = 10;
+        state.solids[0].active = true;
+        state.solids[0].x = 5;
+        state.solids[0].z = 5;
+        state.solids[0].vx = -15;
+        state.solids[0].vz = -15;
+        state.orbitSlots[0] = { occupied: true, solidId: 0 };
+        state.solids[0].orbitSlot = 0;
+
+        evaluateTracerLock(state, false);
+        const launch = launchOrbiter(state, 0);
+
+        expect(launch).not.toBeNull();
+        expect(launch!.isCrit).toBe(true);
+    });
+});
 
     it('elastic reflection angle equals incident angle at arena boundary', () => {
         const state = createInitialState();
@@ -81,6 +217,74 @@ describe('Feel tests per MASTER_SPEC section 8', () => {
 
         expect(state.marble.vx).toBeCloseTo(10, 1);
         expect(state.marble.vz).toBeCloseTo(-10, 1);
+
+    it('tracer line evaluates target lock when aimed at core gap or target', () => {
+        const state = createInitialState();
+        state.solids[0].mass = 5;
+        state.solids[0].active = true;
+        state.solids[0].x = 5;
+        state.solids[0].z = 5;
+        state.solids[0].vx = -15;
+        state.solids[0].vz = -15;
+        state.orbitSlots[0] = { occupied: true, solidId: 0 };
+        state.solids[0].orbitSlot = 0;
+
+        const lockState = evaluateTracerLock(state, false);
+        expect(lockState.hasOrbiter).toBe(true);
+        expect(lockState.isLocked).toBe(true);
+    });
+
+    it('perfect release within 70ms window triggers critical hit', () => {
+        const state = createInitialState();
+        state.solids[0].mass = 10;
+        state.solids[0].active = true;
+        state.solids[0].x = 5;
+        state.solids[0].z = 5;
+        state.solids[0].vx = -15;
+        state.solids[0].vz = -15;
+        state.orbitSlots[0] = { occupied: true, solidId: 0 };
+        state.solids[0].orbitSlot = 0;
+
+        evaluateTracerLock(state, false);
+        const launch = launchOrbiter(state, 0);
+
+        expect(launch).not.toBeNull();
+        expect(launch!.isCrit).toBe(true);
+    });
+});
+
+    it('tracer line evaluates target lock when aimed at core gap or target', () => {
+        const state = createInitialState();
+        state.solids[0].mass = 5;
+        state.solids[0].active = true;
+        state.solids[0].x = 5;
+        state.solids[0].z = 5;
+        state.solids[0].vx = -15;
+        state.solids[0].vz = -15;
+        state.orbitSlots[0] = { occupied: true, solidId: 0 };
+        state.solids[0].orbitSlot = 0;
+
+        const lockState = evaluateTracerLock(state, false);
+        expect(lockState.hasOrbiter).toBe(true);
+        expect(lockState.isLocked).toBe(true);
+    });
+
+    it('perfect release within 70ms window triggers critical hit', () => {
+        const state = createInitialState();
+        state.solids[0].mass = 10;
+        state.solids[0].active = true;
+        state.solids[0].x = 5;
+        state.solids[0].z = 5;
+        state.solids[0].vx = -15;
+        state.solids[0].vz = -15;
+        state.orbitSlots[0] = { occupied: true, solidId: 0 };
+        state.solids[0].orbitSlot = 0;
+
+        evaluateTracerLock(state, false);
+        const launch = launchOrbiter(state, 0);
+
+        expect(launch).not.toBeNull();
+        expect(launch!.isCrit).toBe(true);
     });
 
     it('shield panel dies to exactly 2 full-spin-up heavy hits in sector 1', () => {

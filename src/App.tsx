@@ -1,6 +1,5 @@
 import React, { useRef, useState, useMemo, useEffect, useCallback } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
-import { Physics, RigidBody, CuboidCollider, BallCollider } from '@react-three/rapier';
 import { Box, Sphere, Ring, Torus, Sparkles as DreiSparkles } from '@react-three/drei';
 
 import * as THREE from 'three';
@@ -23,7 +22,8 @@ import { GameOverModal } from './components/GameOverModal';
 import { SectorCompleteModal } from './components/SectorCompleteModal';
 import { SectorBriefingModal } from './components/SectorBriefingModal';
 import { SectorObjectiveHUD } from './components/SectorObjectiveHUD';
-import { Joystick } from './components/Joystick';
+import { TouchControls } from './components/TouchControls';
+import { SlingTracer } from './components/SlingTracer';
 import { MasterMachineAperture } from './components/MasterMachineAperture';
 import { GroundChargerRings } from './components/GroundChargerRings';
 import { QuantumVaultModal } from './components/QuantumVaultModal';
@@ -474,34 +474,7 @@ function SolidObjectItem({
     return (
         <group>
             {isShattered && <ShatterDebris size={obj.size} colorHex={obj.colorHex} type={obj.type} hue={obj.hue} />}
-            <RigidBody 
-                ref={rbRef}
-                position={obj.position}
-                colliders={false}
-                restitution={0.85}
-                friction={0.25}
-                onCollisionEnter={(evt: any) => {
-                    if (isPaused || isShattered) return;
-                    const now = performance.now();
-                    if (now - lastCollisionTimeRef.current < 60) return;
-                    lastCollisionTimeRef.current = now;
-
-                    const impulse = typeof evt?.totalImpulse === 'number' ? Math.abs(evt.totalImpulse) : 3.5;
-                    const normVel = Math.min(10.0, Math.max(1.5, impulse));
-                    const vibMs = Math.min(60, Math.max(15, Math.round(normVel * 6)));
-
-                    triggerHapticFeedback(vibMs);
-                    soundEngine.playSolidImpactSound(Math.max(2.5, normVel), obj.hue, obj.size, obj.mass, obj.type);
-                    soundEngine.playWobbleResonance(0.7, 12, obj.hue, obj.size, obj.type);
-                    triggerShockwave(Math.min(2.5, normVel));
-                    takeDamage(Math.max(8, Math.round(normVel * 8)));
-                    onObjectRammed();
-                }}
-            >
-                {obj.type === 'sphere' && <BallCollider args={[obj.size]} />}
-                {obj.type === 'box' && <CuboidCollider args={[obj.size / 2, obj.size / 2, obj.size / 2]} />}
-                {obj.type === 'torus' && <BallCollider args={[obj.size]} />}
-
+            <group position={[0, -1, 0]}>
                 <group ref={meshGroupRef} onClick={triggerUserWobbleImpulse} visible={!isShattered}>
                     <group position={[0, obj.size * 1.15 + 0.65, 0]} ref={healthBarRef}>
                         <mesh position={[0, 0, 0]}>
@@ -542,7 +515,7 @@ function SolidObjectItem({
                         </Torus>
                     )}
                 </group>
-            </RigidBody>
+            </group>
         </group>
     );
 }
@@ -694,7 +667,7 @@ function ShieldImpactSparks({ impactEvent }: { impactEvent: { pos: THREE.Vector3
 }
 
 // Interactive Singularity Locus / Cybernetic Protagonist Controlled Sphere
-function InteractiveLocus({ 
+function InteractiveLocus({
     onPointerMove,
     moveSpeedMultiplier = 1.0,
     onProtagonistCollision,
@@ -703,9 +676,6 @@ function InteractiveLocus({
     isPaused = false,
     subsystem3Power = 1.0,
     isShieldActive = true,
-    joystickVectorRef,
-    gestureRef,
-    gestureControlMode,
 }: {
     onPointerMove?: (pos: THREE.Vector3 | null, isPulling: boolean, isMoving: boolean, moveVel: number) => void;
     moveSpeedMultiplier?: number;
@@ -715,12 +685,7 @@ function InteractiveLocus({
     isPaused?: boolean;
     subsystem3Power?: number;
     isShieldActive?: boolean;
-    joystickVectorRef: React.MutableRefObject<{ gx: number; gz: number; active: boolean }>;
-    gestureRef: React.MutableRefObject<any>;
-    gestureControlMode: 'swipe' | 'joystick' | 'off';
 }) {
-    const { raycaster, camera, pointer } = useThree();
-    const plane = useMemo(() => new THREE.Plane(new THREE.Vector3(0, 1, 0), -5), []);
     const locusPos = useRef(new THREE.Vector3(0, 5, 0));
     const prevPos = useRef(new THREE.Vector3(0, 5, 0));
     const [active, setActive] = useState(true);
@@ -770,52 +735,22 @@ function InteractiveLocus({
             outerCooldownRef.current -= delta;
         }
 
-        raycaster.setFromCamera(pointer, camera);
-        let isPointerInScene = false;
-
-        if (raycaster.ray.intersectPlane(plane, _locusIntersectTarget)) {
-            _locusIntersectTarget.x = Math.max(-48, Math.min(48, _locusIntersectTarget.x));
-            _locusIntersectTarget.z = Math.max(-48, Math.min(48, _locusIntersectTarget.z));
-            _locusIntersectTarget.y = 5;
-            isPointerInScene = true;
-        }
-
-        // Joystick Override (REFINED DIRECT DRIVE - Fast but controlled)
-        let targetVelX = ((keys.current['KeyD'] || keys.current['ArrowRight'] ? 1 : 0) - (keys.current['KeyA'] || keys.current['ArrowLeft'] ? 1 : 0)) * 58 * moveSpeedMultiplier;
-        let targetVelZ = ((keys.current['KeyS'] || keys.current['ArrowDown'] ? 1 : 0) - (keys.current['KeyW'] || keys.current['ArrowUp'] ? 1 : 0)) * 58 * moveSpeedMultiplier;
-
-        if (gestureControlMode === 'joystick' && joystickVectorRef.current.active) {
-            targetVelX = (joystickVectorRef.current.gx / 12) * 58 * moveSpeedMultiplier;
-            targetVelZ = (joystickVectorRef.current.gz / 12) * 58 * moveSpeedMultiplier;
-            playerVelRef.current.x = THREE.MathUtils.lerp(playerVelRef.current.x, targetVelX, delta * 12.5);
-            playerVelRef.current.y = THREE.MathUtils.lerp(playerVelRef.current.y, targetVelZ, delta * 12.5);
-        }
-        // Swipe Override
-        else if (gestureControlMode === 'swipe' && gestureRef.current.active) {
-            targetVelX = (gestureRef.current.gx / 14) * 58 * moveSpeedMultiplier;
-            targetVelZ = (gestureRef.current.gz / 14) * 58 * moveSpeedMultiplier;
+        let targetVelX = 0;
+        let targetVelZ = 0;
+        if (gameRefs.joystickVector.active) {
+            targetVelX = gameRefs.joystickVector.gx * 58 * moveSpeedMultiplier;
+            targetVelZ = gameRefs.joystickVector.gz * 58 * moveSpeedMultiplier;
             playerVelRef.current.x = THREE.MathUtils.lerp(playerVelRef.current.x, targetVelX, delta * 12.5);
             playerVelRef.current.y = THREE.MathUtils.lerp(playerVelRef.current.y, targetVelZ, delta * 12.5);
         } else {
-            // Keyboard/Idle Damping
-            playerVelRef.current.x = THREE.MathUtils.lerp(playerVelRef.current.x, targetVelX, delta * 10);
-            playerVelRef.current.y = THREE.MathUtils.lerp(playerVelRef.current.y, targetVelZ, delta * 10);
+            playerVelRef.current.x = THREE.MathUtils.lerp(playerVelRef.current.x, 0, delta * 10);
+            playerVelRef.current.y = THREE.MathUtils.lerp(playerVelRef.current.y, 0, delta * 10);
         }
-
         locusPos.current.x += playerVelRef.current.x * delta;
         locusPos.current.z += playerVelRef.current.y * delta;
-
-        // ARENA BOUNDARIES: Hard clamp to grid edges
         locusPos.current.x = Math.max(-48, Math.min(48, locusPos.current.x));
         locusPos.current.z = Math.max(-48, Math.min(48, locusPos.current.z));
-        locusPos.current.y = 5.0; // Strictly ground to floor height
-
-        if (isPointerInScene && !keys.current['KeyW'] && !keys.current['KeyS'] && !keys.current['KeyA'] && !keys.current['KeyD'] && !joystickVectorRef.current.active) {
-            // Lerp factor 0.04 (snappier pointer tracking)
-            locusPos.current.lerp(_locusIntersectTarget, 0.04);
-        }
-
-        // STRICT BOUNDARY CLAMP: Player CANNOT move within central singularity or shield bubble
+        locusPos.current.y = 5.0;
         const minAllowedRadius = isShieldActive ? 10.8 : 7.2; // Shield bubble radius is ~9.5; singularity core is ~6.0
         const curDistFromOrigin = Math.sqrt(locusPos.current.x * locusPos.current.x + locusPos.current.z * locusPos.current.z);
 
@@ -1059,6 +994,27 @@ function InteractiveLocus({
     };
 
     return (
+            <group position={[0, -1, 0]}>
+            <mesh ref={sphereRef} visible={active}>
+                <sphereGeometry args={[1.5, 16, 16]} />
+                <meshStandardMaterial ref={sphereMatRef}
+                    transparent 
+                    opacity={0.9}
+                />
+            </mesh>
+            {active && (
+                <>
+                    {/* Outer Ring Gravity Capture Visual Halos */}
+                    {isOuterOrbitingState && (
+                        <group>
+                            <Torus args={[3.8, 0.22, 12, 24]} rotation={[Math.PI / 2, 0, 0]}>
+                                <meshBasicMaterial color="#f59e0b" transparent opacity={0.95} />
+                            </Torus>
+                            <Torus args={[4.8, 0.12, 12, 24]} rotation={[0, Math.PI / 2, 0]}>
+                                <meshBasicMaterial color="#38bdf8" transparent opacity={0.85} />
+                            </Torus>
+                        </group>
+                    )}
         <RigidBody 
             ref={rbRef}
             type="kinematicPosition"
@@ -1075,6 +1031,32 @@ function InteractiveLocus({
                 <meshBasicMaterial vertexColors transparent opacity={0.8} side={THREE.DoubleSide} />
             </mesh>
 
+                    {/* Orbiting Wobble Satellite Sphere that sticks to Protagonist */}
+                    <mesh ref={satelliteRef}>
+                        <sphereGeometry args={[0.45, 12, 12]} />
+                        <meshStandardMaterial 
+                            color={bumpFlashTimerRef.current > 0 ? "#ffffff" : (isPulling ? "#f59e0b" : "#ec4899")}
+                            emissive={bumpFlashTimerRef.current > 0 ? "#ffffff" : (isPulling ? "#fbbf24" : "#d946ef")}
+                            emissiveIntensity={bumpFlashTimerRef.current > 0 ? 3.0 : 0.8}
+                            roughness={0.1}
+                        />
+                    </mesh>
+
+                    {/* Ground Plane Light Projection Disc */}
+                    <group position={[0, -0.8, 0]}>
+                        <Ring args={[2.0, 2.5, 20]} rotation={[-Math.PI / 2, 0, 0]}>
+                            <meshBasicMaterial 
+                                color={bumpFlashTimerRef.current > 0 ? "#ffffff" : (isPulling ? "#fbbf24" : "#38bdf8")}
+                                transparent 
+                                opacity={bumpFlashTimerRef.current > 0 ? 0.95 : 0.5}
+                                side={THREE.DoubleSide} 
+                                depthWrite={false}
+                            />
+                        </Ring>
+                    </group>
+                </>
+            )}
+            </group>
             {/* Hero Marble: Inner White Core + Warm Amber Fresnel Rim Shell */}
             <group ref={sphereRef} visible={active}>
                 {/* Inner White Emissive Core */}
@@ -1272,9 +1254,7 @@ function FusionSwarmScene({
                 <meshStandardMaterial metalness={0.6} roughness={0.2} />
             </instancedMesh>
 
-            <RigidBody type="fixed" position={[0, -1, 0]} colliders={false}>
-                <CuboidCollider args={[55, 1, 55]} />
-                {/* Translucent Frosted Cyber Surface Field */}
+            <group position={[0, -1, 0]}>
                 <Box args={[110, 2, 110]} receiveShadow>
                     <meshStandardMaterial 
                         color="#020617" 
@@ -1286,7 +1266,7 @@ function FusionSwarmScene({
                         side={THREE.DoubleSide}
                     />
                 </Box>
-            </RigidBody>
+            </group>
 
             {/* Surface Cyber Grid Matrix defining the floor boundary */}
             <gridHelper args={[110, 44, '#06b6d4', '#1e293b']} position={[0, 0.01, 0]}>
@@ -1300,85 +1280,6 @@ function FusionSwarmScene({
             <pointLight position={[0, -6, 0]} intensity={2.8} color="#38bdf8" distance={80} />
             <pointLight position={[0, -18, 0]} intensity={2.0} color="#0284c7" distance={90} />
         </>
-    );
-}
-
-// Mobile Gesture Gravity Holographic HUD Component
-function MobileGestureGravityHUD({
-    gestureVector,
-    gestureControlMode,
-    onToggleMode,
-    gravityTilt,
-}: {
-    gestureVector: { dx: number; dy: number; gx: number; gz: number; angle: number; magnitude: number; active: boolean };
-    gestureControlMode: 'swipe' | 'joystick' | 'off';
-    onToggleMode: () => void;
-    gravityTilt: [number, number, number];
-}) {
-    if (gestureControlMode === 'off') return null;
-
-    // Use gesture active vector if user is dragging/swiping, or gravityTilt if using keys/tilt
-    const activeGx = gestureVector.active ? gestureVector.gx : gravityTilt[0];
-    const activeGz = gestureVector.active ? gestureVector.gz : gravityTilt[2];
-
-    const maxRadiusPx = 24; // 3/4 scale max offset radius inside compass dial
-    const xOffsetPx = Math.max(-maxRadiusPx, Math.min(maxRadiusPx, (activeGx / 14.0) * maxRadiusPx));
-    const yOffsetPx = Math.max(-maxRadiusPx, Math.min(maxRadiusPx, (activeGz / 14.0) * maxRadiusPx));
-
-    const lineLength = Math.sqrt(xOffsetPx * xOffsetPx + yOffsetPx * yOffsetPx);
-    const lineAngleDeg = Math.atan2(yOffsetPx, xOffsetPx) * (180 / Math.PI);
-
-    return (
-        <div className="absolute bottom-4 left-3 md:bottom-5 md:left-4 z-20 pointer-events-auto font-mono flex flex-col gap-1.5 select-none max-w-[220px]">
-            {/* Gesture Holographic Compass Dial (3/4 Size) */}
-            <div className="relative w-18 h-18 sm:w-21 sm:h-21 rounded-full bg-slate-950/90 border-2 border-amber-500/50 backdrop-blur-md p-1 shadow-2xl flex items-center justify-center group overflow-hidden">
-                {/* Rotating Grid Backdrop */}
-                <div className="absolute inset-1 rounded-full border border-dashed border-amber-500/25 animate-spin" style={{ animationDuration: '24s' }} />
-                <div className="absolute inset-2.5 rounded-full border border-cyan-500/30" />
-
-                {/* Axis Direction Indicators */}
-                <span className="absolute top-0.5 text-[8px] font-extrabold text-amber-400/90 tracking-tighter">-Z</span>
-                <span className="absolute bottom-0.5 text-[8px] font-extrabold text-amber-400/90 tracking-tighter">+Z</span>
-                <span className="absolute left-0.5 text-[8px] font-extrabold text-cyan-400/90 tracking-tighter">-X</span>
-                <span className="absolute right-0.5 text-[8px] font-extrabold text-cyan-400/90 tracking-tighter">+X</span>
-
-                {/* Center Core Anchor Marker */}
-                <div 
-                    className="absolute w-2 h-2 rounded-full bg-cyan-400/80 border border-white shadow-[0_0_8px_#38bdf8] -translate-x-1/2 -translate-y-1/2" 
-                    style={{ left: '50%', top: '50%' }} 
-                />
-
-                {/* Dynamic Gravity Energy Trail Vector */}
-                {lineLength > 1.5 && (
-                    <div 
-                        className="absolute origin-left h-1 rounded-full pointer-events-none transition-all duration-75"
-                        style={{
-                            left: '50%',
-                            top: '50%',
-                            width: `${lineLength}px`,
-                            transform: `translateY(-50%) rotate(${lineAngleDeg}deg)`,
-                            backgroundColor: gestureVector.active ? '#fbbf24' : '#38bdf8',
-                            boxShadow: gestureVector.active ? '0 0 12px #f59e0b' : '0 0 8px #06b6d4',
-                        }}
-                    />
-                )}
-
-                {/* Dynamic Gravity Force Reticle Target Pointer */}
-                <div 
-                    className={`absolute rounded-full border-2 transition-all duration-75 pointer-events-none -translate-x-1/2 -translate-y-1/2 flex items-center justify-center ${
-                        gestureVector.active || lineLength > 2
-                            ? 'w-3.5 h-3.5 bg-amber-400 border-white shadow-[0_0_16px_#f59e0b] scale-110 z-10' 
-                            : 'w-2.5 h-2.5 bg-cyan-400 border-cyan-100 shadow-[0_0_10px_#06b6d4]'
-                    }`}
-                    style={{
-                        left: `calc(50% + ${xOffsetPx}px)`,
-                        top: `calc(50% + ${yOffsetPx}px)`,
-                    }}
-                >
-                    <div className={`w-1 h-1 rounded-full ${gestureVector.active ? 'bg-white animate-ping' : 'bg-cyan-100'}`} />
-                </div>
-            </div>
-        </div>
     );
 }
 
@@ -1396,48 +1297,26 @@ export default function App() {
     const [locusData, setLocusData] = useState<{ pos: THREE.Vector3 | null; isPulling: boolean; isMoving: boolean; moveVel: number }>({ pos: null, isPulling: false, isMoving: false, moveVel: 0 });
 
     // Gesture-Based Mobile Gravity Control State & Refs
-    const [gestureControlMode, setGestureControlMode] = useState<'swipe' | 'joystick' | 'off'>('joystick');
-    const [gestureVector, setGestureVector] = useState<{
-        dx: number;
-        dy: number;
-        gx: number;
-        gz: number;
-        angle: number;
-        magnitude: number;
-        active: boolean;
-    }>({
-        dx: 0,
-        dy: 0,
-        gx: 0,
-        gz: 0,
-        angle: 0,
-        magnitude: 0,
-        active: false,
-    });
-
-    const gestureRef = useRef<{
-        startX: number;
-        startY: number;
-        active: boolean;
-        gx: number;
-        gz: number;
-        lastQuadrant: number;
-    }>({
-        startX: 0,
-        startY: 0,
-        active: false,
-        gx: 0,
-        gz: 0,
-        lastQuadrant: -1,
-    });
-
-    const joystickVectorRef = useRef({ gx: 0, gz: 0, active: false });
     const [fusionMetrics, setFusionMetrics] = useState({ activeCount: PARTICLE_COUNT, maxFusionStage: 0, totalMass: 100 });
     const [solidObjects, setSolidObjects] = useState<SolidPhysicsObjectData[]>(INITIAL_SOLID_OBJECTS);
     const [supernovaFlash, setSupernovaFlash] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
 
     // --- CYBERNETIC ARCADE GAME STATE ---
+    const [perfectBanner, setPerfectBanner] = useState<{ id: number; text: string } | null>(null);
+
+    const handleTargetLockFlash = useCallback(() => {
+        soundEngine.playTargetLockTick();
+        triggerHapticFeedback(10);
+    }, []);
+
+    const handlePerfectRelease = useCallback((_x: number, _z: number) => {
+        soundEngine.playPerfectSlingSound();
+        triggerHapticFeedback([40, 20, 80]);
+        setPerfectBanner({ id: Date.now(), text: '⚡ PERFECT RELEASE :: 2X CRITICAL SLING! ⚡' });
+        setTimeout(() => setPerfectBanner(null), 1000);
+    }, []);
+
     const [gameState, setGameState] = useState<'playing' | 'levelup' | 'gameover'>('playing');
     const [playerStats, setPlayerStats] = useState<PlayerStats>({
         coreIntegrity: 100,
@@ -2795,88 +2674,10 @@ export default function App() {
         setIsMuted(muted);
     };
 
-    const handleGestureStart = (e: React.PointerEvent | React.TouchEvent) => {
-        if (isGamePaused) return;
-        handleUserInteraction();
-
-        // If in joystick mode, App level gesture handler only initializes sound/interaction
-        // but doesn't handle gravity tilt to avoid conflict
-        if (gestureControlMode === 'joystick') return;
-
-        setLocusData(prev => ({ ...prev, isPulling: true }));
-
-        if (gestureControlMode === 'off') return;
-
-        const clientX = 'touches' in e ? (e as React.TouchEvent).touches[0].clientX : (e as React.PointerEvent).clientX;
-        const clientY = 'touches' in e ? (e as React.TouchEvent).touches[0].clientY : (e as React.PointerEvent).clientY;
-
-        gestureRef.current.startX = clientX;
-        gestureRef.current.startY = clientY;
-        gestureRef.current.active = true;
-        gestureRef.current.lastQuadrant = -1;
-
-        triggerHapticFeedback(12);
-    };
-
-    const handleGestureMove = (e: React.PointerEvent | React.TouchEvent) => {
-        if (isGamePaused || gestureControlMode === 'joystick') return;
-        if (!gestureRef.current.active || gestureControlMode === 'off') return;
-        const clientX = 'touches' in e ? (e as React.TouchEvent).touches[0].clientX : (e as React.PointerEvent).clientX;
-        const clientY = 'touches' in e ? (e as React.TouchEvent).touches[0].clientY : (e as React.PointerEvent).clientY;
-
-        const dx = clientX - gestureRef.current.startX;
-        const dy = clientY - gestureRef.current.startY;
-
-        const maxPx = 65;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        const mag = Math.min(1.0, dist / maxPx);
-        const angle = Math.atan2(dy, dx) * (180 / Math.PI);
-
-        const targetGx = Math.max(-14, Math.min(14, (dx / maxPx) * 14.0));
-        const targetGz = Math.max(-14, Math.min(14, (dy / maxPx) * 14.0));
-
-        gestureRef.current.gx = targetGx;
-        gestureRef.current.gz = targetGz;
-
-        const quadrant = Math.floor((angle + 180) / 90);
-        if (quadrant !== gestureRef.current.lastQuadrant && mag > 0.35) {
-            gestureRef.current.lastQuadrant = quadrant;
-            triggerHapticFeedback(14);
-        }
-
-        setGestureVector({
-            dx,
-            dy,
-            gx: targetGx,
-            gz: targetGz,
-            angle,
-            magnitude: mag,
-            active: true,
-        });
-    };
-
-    const handleGestureEnd = () => {
-        if (gestureControlMode !== 'joystick') {
-            setLocusData(prev => ({ ...prev, isPulling: false }));
-        }
-        if (!gestureRef.current.active) return;
-        gestureRef.current.active = false;
-        triggerHapticFeedback(10);
-
-        setGestureVector(prev => ({ ...prev, active: false }));
-    };
-
     return (
         <div 
             className="relative w-full h-screen bg-slate-950 overflow-hidden touch-none selection:bg-transparent font-sans cursor-crosshair"
             onClick={handleUserInteraction}
-            onPointerDown={handleGestureStart}
-            onPointerMove={handleGestureMove}
-            onPointerUp={handleGestureEnd}
-            onPointerCancel={handleGestureEnd}
-            onTouchStart={handleGestureStart}
-            onTouchMove={handleGestureMove}
-            onTouchEnd={handleGestureEnd}
         >
             <Canvas
                 dpr={[1, 1.1]}
@@ -2889,6 +2690,7 @@ export default function App() {
                 <fog attach="fog" args={['#020617', 80, 450]} />
 
                 <ShieldImpactSparks impactEvent={shieldImpactEvent} />
+                <SlingTracer isShieldActive={sectorProgress.isShieldActive} onLockFlash={handleTargetLockFlash} />
 
                 <FractalSingularity 
                     mode={sectorLevel === 1 ? 'neuralIgnition' : sectorLevel === 2 ? 'chronos' : sectorLevel === 3 ? 'quantumRelay' : sectorLevel === 4 ? 'xenon' : sectorLevel === 5 ? 'planetaryGearbox' : sectorLevel === 6 ? 'hyperArcConduit' : sectorLevel === 7 ? 'hydraFractalCore' : sectorLevel === 8 ? 'aetherHarmonic' : sectorLevel === 9 ? 'riemannianFold' : sectorLevel === 10 ? 'chronosOmni' : fractalMode}
@@ -2939,7 +2741,6 @@ export default function App() {
                     isPaused={isGamePaused}
                 />
 
-                <Physics gravity={[0, -9.81, 0]} timeStep={1 / 60} paused={isGamePaused}>
                     <FusionSwarmScene 
                         gravityTilt={[0, -9.81, 0]}
                                                 onNodeAbsorbed={handleNodeAbsorbed}
@@ -2963,16 +2764,23 @@ export default function App() {
                         isPaused={isGamePaused}
                         subsystem3Power={machineSubsystems.s3Power}
                         isShieldActive={sectorProgress.isShieldActive}
-                        joystickVectorRef={joystickVectorRef}
-                        gestureRef={gestureRef}
-                        gestureControlMode={gestureControlMode}
                     />
-                </Physics>
 
                 {/* EffectComposer disabled for emergency hardware stabilization */}
             </Canvas>
 
             <AnimatePresence>
+                {perfectBanner && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.8, y: -20 }}
+                        animate={{ opacity: 1, scale: 1.1, y: 0 }}
+                        exit={{ opacity: 0, scale: 1.3, y: -40 }}
+                        transition={{ duration: 0.35, ease: "easeOut" }}
+                        className="absolute top-24 left-1/2 -translate-x-1/2 z-50 pointer-events-none select-none font-mono font-black text-lg sm:text-2xl text-cyan-300 bg-slate-950/80 border-2 border-cyan-400 px-6 py-2 rounded-full shadow-[0_0_30px_rgba(34,211,238,0.8)] tracking-wider uppercase text-center"
+                    >
+                        {perfectBanner.text}
+                    </motion.div>
+                )}
                 {supernovaFlash && (
                     <motion.div 
                         initial={{ opacity: 0.9 }}
@@ -2999,6 +2807,17 @@ export default function App() {
 
             {/* PERSISTENT TOP NOTIFICATION BANNER (DIRECTLY BENEATH TOP HUD ICONS) */}
             <AnimatePresence>
+                {perfectBanner && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.8, y: -20 }}
+                        animate={{ opacity: 1, scale: 1.1, y: 0 }}
+                        exit={{ opacity: 0, scale: 1.3, y: -40 }}
+                        transition={{ duration: 0.35, ease: "easeOut" }}
+                        className="absolute top-24 left-1/2 -translate-x-1/2 z-50 pointer-events-none select-none font-mono font-black text-lg sm:text-2xl text-cyan-300 bg-slate-950/80 border-2 border-cyan-400 px-6 py-2 rounded-full shadow-[0_0_30px_rgba(34,211,238,0.8)] tracking-wider uppercase text-center"
+                    >
+                        {perfectBanner.text}
+                    </motion.div>
+                )}
                 {levelUpBanner ? (
                     <motion.div
                         initial={{ opacity: 0, y: -12, scale: 0.92 }}
@@ -3039,6 +2858,17 @@ export default function App() {
 
             <div className="absolute inset-0 pointer-events-none z-20 overflow-hidden flex flex-col items-center justify-center">
                 <AnimatePresence>
+                {perfectBanner && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.8, y: -20 }}
+                        animate={{ opacity: 1, scale: 1.1, y: 0 }}
+                        exit={{ opacity: 0, scale: 1.3, y: -40 }}
+                        transition={{ duration: 0.35, ease: "easeOut" }}
+                        className="absolute top-24 left-1/2 -translate-x-1/2 z-50 pointer-events-none select-none font-mono font-black text-lg sm:text-2xl text-cyan-300 bg-slate-950/80 border-2 border-cyan-400 px-6 py-2 rounded-full shadow-[0_0_30px_rgba(34,211,238,0.8)] tracking-wider uppercase text-center"
+                    >
+                        {perfectBanner.text}
+                    </motion.div>
+                )}
                     {floatingPoints.map(p => (
                         <motion.div
                             key={p.id}
@@ -3126,21 +2956,6 @@ export default function App() {
                         <span>{temporalState.isRewinding ? '↺ REWINDING' : `REWIND [R] (${Math.round(temporalState.chronoEnergy)}%)`}</span>
                     </button>
 
-                    <button 
-                        onClick={() => {
-                            handleUserInteraction();
-                            setGestureControlMode(prev => prev === 'swipe' ? 'joystick' : prev === 'joystick' ? 'off' : 'swipe');
-                            triggerHapticFeedback(20);
-                        }}
-                        className={`p-1.5 rounded-full border transition-all backdrop-blur shadow-lg cursor-pointer ${
-                            gestureControlMode !== 'off' 
-                                ? 'bg-amber-950/85 border-amber-400/60 text-amber-300 hover:bg-amber-500/30 shadow-amber-500/20' 
-                                : 'bg-slate-950/85 border-slate-700/60 text-slate-400 hover:text-slate-200'
-                        }`}
-                        title={`Mobile Gesture Mode: ${gestureControlMode.toUpperCase()}`}
-                    >
-                        <Compass className="w-3.5 h-3.5" />
-                    </button>
 
                     <button 
                         onClick={() => setShowQuantumVault(true)}
@@ -3178,35 +2993,22 @@ export default function App() {
                 </div>
             </div>
 
-            {/* MOBILE GESTURE GRAVITY HOLOGRAPHIC COMPASS HUD */}
-            <MobileGestureGravityHUD 
-                gestureVector={gestureVector}
-                gestureControlMode={gestureControlMode}
-                onToggleMode={() => {
-                    handleUserInteraction();
-                    setGestureControlMode(prev => prev === 'swipe' ? 'joystick' : prev === 'joystick' ? 'off' : 'swipe');
-                    triggerHapticFeedback(20);
-                }}
-                gravityTilt={[0, -9.81, 0]}
-            />
+            <TouchControls onRewind={triggerManualChronoRewind} onPerfectRelease={handlePerfectRelease} />
 
-            <Joystick
-                visible={gestureControlMode === 'joystick'}
-                sharedVectorRef={joystickVectorRef}
-                onMove={(gx, gz, active) => {
-                    gestureRef.current.gx = gx;
-                    gestureRef.current.gz = gz;
-                    gestureRef.current.active = active;
-
-                    // Only update state if pulling status changes to prevent redundant re-renders
-                    setLocusData(prev => {
-                        if (prev.isPulling === active) return prev;
-                        return { ...prev, isPulling: active };
-                    });
-                }}
-            />
+            <TouchControls onRewind={triggerManualChronoRewind} onPerfectRelease={handlePerfectRelease} />
 
             <AnimatePresence>
+                {perfectBanner && (
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.8, y: -20 }}
+                        animate={{ opacity: 1, scale: 1.1, y: 0 }}
+                        exit={{ opacity: 0, scale: 1.3, y: -40 }}
+                        transition={{ duration: 0.35, ease: "easeOut" }}
+                        className="absolute top-24 left-1/2 -translate-x-1/2 z-50 pointer-events-none select-none font-mono font-black text-lg sm:text-2xl text-cyan-300 bg-slate-950/80 border-2 border-cyan-400 px-6 py-2 rounded-full shadow-[0_0_30px_rgba(34,211,238,0.8)] tracking-wider uppercase text-center"
+                    >
+                        {perfectBanner.text}
+                    </motion.div>
+                )}
                 {showTutorialHint && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
