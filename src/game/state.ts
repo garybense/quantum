@@ -31,6 +31,7 @@ export interface ItemEntity {
 
 export interface HazardEntity extends CircleBody {
     id: number;
+    nearMissTriggered?: boolean;
 }
 
 export interface GateEntity {

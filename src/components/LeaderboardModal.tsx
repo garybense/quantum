@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'motion/react';
-import { Trophy, Globe, User, X, Award, Flame, Sparkles } from 'lucide-react';
+import { Trophy, Award, X } from 'lucide-react';
 import { LeaderboardEntry } from '../types';
 
 interface LeaderboardModalProps {
@@ -41,7 +41,7 @@ export function LeaderboardModal({
                                 CYBER LEADERBOARDS
                             </h2>
                             <p className="text-xs text-sky-400">
-                                Global Cybernetic Pilots & Grid High-Scores
+                                Local Cybernetic Pilots & Sector Records
                             </p>
                         </div>
                     </div>
@@ -68,41 +68,49 @@ export function LeaderboardModal({
                     </div>
                 </div>
 
-                {/* Leaderboard Table */}
+                {/* Leaderboard Table / Empty State */}
                 <div className="max-h-72 overflow-y-auto pr-2 space-y-2 custom-scrollbar">
-                    {sortedEntries.slice(0, tab === 'top10' ? 10 : 50).map((entry, idx) => {
-                        const isTop3 = idx < 3;
-                        const rankColors = ['text-amber-400 border-amber-500/50 bg-amber-500/10', 'text-slate-300 border-slate-400/50 bg-slate-400/10', 'text-amber-600 border-amber-700/50 bg-amber-700/10'];
+                    {sortedEntries.length === 0 ? (
+                        <div className="py-12 text-center text-slate-400 bg-slate-950/60 rounded-xl border border-slate-800/80 p-6">
+                            <Trophy className="w-12 h-12 text-slate-600 mx-auto mb-3 animate-pulse" />
+                            <p className="text-sm font-bold text-slate-300">NO PILOT RECORDS YET</p>
+                            <p className="text-xs text-slate-500 mt-1">Complete a sector run to claim #1 on the local leaderboard!</p>
+                        </div>
+                    ) : (
+                        sortedEntries.slice(0, tab === 'top10' ? 10 : 50).map((entry, idx) => {
+                            const isTop3 = idx < 3;
+                            const rankColors = ['text-amber-400 border-amber-500/50 bg-amber-500/10', 'text-slate-300 border-slate-400/50 bg-slate-400/10', 'text-amber-600 border-amber-700/50 bg-amber-700/10'];
 
-                        return (
-                            <div 
-                                key={`lb_${entry.id}_${idx}`}
-                                className={`flex items-center justify-between p-3 rounded-lg border text-xs md:text-sm transition-all ${
-                                    isTop3 ? rankColors[idx] : 'bg-slate-800/40 border-slate-700/60 text-slate-200'
-                                }`}
-                            >
-                                <div className="flex items-center gap-3">
-                                    <span className="font-black text-base w-6 text-center">
-                                        #{idx + 1}
-                                    </span>
-                                    <div>
-                                        <div className="font-bold flex items-center gap-1.5">
-                                            <span>{entry.pilotName}</span>
-                                            <span className="text-[10px] opacity-75 font-normal px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700">
-                                                {entry.title}
-                                            </span>
-                                        </div>
-                                        <div className="text-[10px] text-slate-400">
-                                            Level {entry.level} • {entry.highestCombo}x Combo • {entry.date}
+                            return (
+                                <div
+                                    key={`lb_${entry.id}_${idx}`}
+                                    className={`flex items-center justify-between p-3 rounded-lg border text-xs md:text-sm transition-all ${
+                                        isTop3 ? rankColors[idx] : 'bg-slate-800/40 border-slate-700/60 text-slate-200'
+                                    }`}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <span className="font-black text-base w-6 text-center">
+                                            #{idx + 1}
+                                        </span>
+                                        <div>
+                                            <div className="font-bold flex items-center gap-1.5">
+                                                <span>{entry.pilotName}</span>
+                                                <span className="text-[10px] opacity-75 font-normal px-1.5 py-0.5 rounded bg-slate-900 border border-slate-700">
+                                                    {entry.title}
+                                                </span>
+                                            </div>
+                                            <div className="text-[10px] text-slate-400">
+                                                Level {entry.level} • {entry.highestCombo}x Combo • {entry.date}
+                                            </div>
                                         </div>
                                     </div>
+                                    <div className="font-black text-base tracking-wider">
+                                        {entry.score.toLocaleString()}
+                                    </div>
                                 </div>
-                                <div className="font-black text-base tracking-wider">
-                                    {entry.score.toLocaleString()}
-                                </div>
-                            </div>
-                        );
-                    })}
+                            );
+                        })
+                    )}
                 </div>
             </motion.div>
         </div>

@@ -1,90 +1,38 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Zap, Shield, Sparkles, ShoppingBag, Cpu, CheckCircle2, Lock, Flame, Star, Trophy, X, Crown } from 'lucide-react';
+import { Shield, Sparkles, ShoppingBag, Zap, CheckCircle2, Flame, X, Circle, Eye } from 'lucide-react';
 import { soundEngine } from '../audio';
+import { META_UPGRADES, MetaUpgradeDefinition } from '../game/metaUpgrades';
 
 interface QuantumVaultModalProps {
     score: number;
     playerCredits: number;
-    onPurchaseItem: (itemId: string, cost: number, itemType: string) => void;
+    purchasedUpgrades: string[];
+    selectedTrail: string;
+    onBuyUpgrade: (upgradeId: string, cost: number) => void;
+    onSelectTrail: (trailId: string) => void;
     onClose: () => void;
 }
-
-interface StoreItem {
-    id: string;
-    name: string;
-    description: string;
-    priceCredits: number;
-    realPriceUsd: string;
-    category: 'boost' | 'skin' | 'pass';
-    icon: any;
-    badge: string;
-    perk: string;
-}
-
-const VAULT_STORE_ITEMS: StoreItem[] = [
-    {
-        id: 'refill_pack',
-        name: 'Quantum Energy Refill Pack',
-        description: 'Instantly restores 100% Core Integrity and overcharges Nanoshield capacitors to max capacity.',
-        priceCredits: 2500,
-        realPriceUsd: '$0.99',
-        category: 'boost',
-        icon: Zap,
-        badge: 'INSTANT REPAIR',
-        perk: '+100% Core HP & Shield',
-    },
-    {
-        id: 'chrono_pass',
-        name: 'Chrono Stasis VIP Pass',
-        description: 'Permanently unlocks 3x Slow-Mo duration extension and zero cooldown on orbital slingshot velocity.',
-        priceCredits: 7500,
-        realPriceUsd: '$3.99',
-        category: 'pass',
-        icon: Sparkles,
-        badge: 'BEST VALUE',
-        perk: '3x Slow-Mo & Slingshot Mastery',
-    },
-    {
-        id: 'skin_obsidian',
-        name: 'Cyber-Void Obsidian Skin',
-        description: 'Exclusive matte black stealth armor with hyper-vibrant crimson neon vector trails and zero friction.',
-        priceCredits: 12000,
-        realPriceUsd: '$4.99',
-        category: 'skin',
-        icon: Flame,
-        badge: 'EXCLUSIVE SKIN',
-        perk: 'Stealth Void Aura & Trail',
-    },
-    {
-        id: 'neural_subscription',
-        name: 'Aura Neural Pass (Monthly)',
-        description: 'Ultimate subscription tier: 2x permanent XP gain, zero shield shear damage, and unlimited daily drops.',
-        priceCredits: 25000,
-        realPriceUsd: '$9.99/mo',
-        category: 'pass',
-        icon: Crown,
-        badge: 'VIP PASS',
-        perk: '2x XP & Zero Shear Damage',
-    },
-];
 
 export function QuantumVaultModal({
     score,
     playerCredits,
-    onPurchaseItem,
+    purchasedUpgrades,
+    selectedTrail,
+    onBuyUpgrade,
+    onSelectTrail,
     onClose,
 }: QuantumVaultModalProps) {
-    const [selectedTab, setSelectedTab] = useState<'all' | 'boost' | 'skin' | 'pass'>('all');
-    const [purchasedItems, setPurchasedItems] = useState<Record<string, boolean>>({});
-    const [purchaseModalItem, setPurchaseModalItem] = useState<StoreItem | null>(null);
+    const [selectedTab, setSelectedTab] = useState<'all' | 'start_shield' | 'magnet' | 'fifth_orbit' | 'trail_cosmetic'>('all');
+    const [purchaseModalItem, setPurchaseModalItem] = useState<MetaUpgradeDefinition | null>(null);
 
-    const filteredItems = VAULT_STORE_ITEMS.filter(item => selectedTab === 'all' || item.category === selectedTab);
+    const filteredItems = META_UPGRADES.filter(
+        item => selectedTab === 'all' || item.category === selectedTab
+    );
 
-    const handleBuy = (item: StoreItem) => {
+    const handleConfirmBuy = (item: MetaUpgradeDefinition) => {
         soundEngine.playLevelUpSound();
-        setPurchasedItems(prev => ({ ...prev, [item.id]: true }));
-        onPurchaseItem(item.id, item.priceCredits, item.category);
+        onBuyUpgrade(item.id, item.costCredits);
         setPurchaseModalItem(null);
     };
 
@@ -104,13 +52,13 @@ export function QuantumVaultModal({
                         </div>
                         <div>
                             <h2 className="text-xl md:text-2xl font-black text-amber-300 tracking-wider flex items-center gap-2">
-                                QUANTUM VAULT & CYBER-STORE
+                                QUANTUM VAULT & META SHOP
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-amber-400/20 border border-amber-400/40 text-amber-200 font-bold">
-                                    LIVE MONETIZATION
+                                    PERMANENT UPGRADES
                                 </span>
                             </h2>
                             <p className="text-xs text-slate-400">
-                                Upgrade your cybernetic resonance, unlock exclusive skins, and acquire VIP pass privileges.
+                                Invest earned credits into permanent cybernetic enhancements and orbital cosmetics.
                             </p>
                         </div>
                     </div>
@@ -124,21 +72,27 @@ export function QuantumVaultModal({
 
                 {/* Subheader / Tabs & Currency */}
                 <div className="px-6 py-3 bg-slate-900/90 border-b border-slate-800 flex flex-wrap items-center justify-between gap-4">
-                    <div className="flex items-center gap-2">
-                        {(['all', 'boost', 'skin', 'pass'] as const).map(tab => (
+                    <div className="flex items-center gap-2 overflow-x-auto py-1">
+                        {[
+                            { id: 'all', label: 'ALL' },
+                            { id: 'start_shield', label: 'SHIELD' },
+                            { id: 'magnet', label: 'MAGNET' },
+                            { id: 'fifth_orbit', label: 'ORBIT' },
+                            { id: 'trail_cosmetic', label: 'TRAILS' },
+                        ].map(tab => (
                             <button
-                                key={tab}
+                                key={tab.id}
                                 onClick={() => {
                                     soundEngine.playLevelUpSound();
-                                    setSelectedTab(tab);
+                                    setSelectedTab(tab.id as any);
                                 }}
-                                className={`px-4 py-1.5 rounded-xl text-xs font-bold tracking-wider transition-all cursor-pointer uppercase ${
-                                    selectedTab === tab
+                                className={`px-3 py-1.5 rounded-xl text-xs font-bold tracking-wider transition-all cursor-pointer uppercase ${
+                                    selectedTab === tab.id
                                         ? 'bg-amber-500 text-slate-950 font-black shadow-[0_0_15px_rgba(245,158,11,0.5)]'
                                         : 'bg-slate-800/70 text-slate-400 hover:text-slate-200 border border-slate-700/60'
                                 }`}
                             >
-                                {tab}s
+                                {tab.label}
                             </button>
                         ))}
                     </div>
@@ -158,8 +112,11 @@ export function QuantumVaultModal({
                 {/* Store Catalog Grid */}
                 <div className="p-6 overflow-y-auto flex-1 grid grid-cols-1 md:grid-cols-2 gap-5">
                     {filteredItems.map(item => {
-                        const IconComponent = item.icon;
-                        const isPurchased = purchasedItems[item.id];
+                        const isPurchased = purchasedUpgrades.includes(item.id);
+                        const isAffordable = playerCredits >= item.costCredits;
+                        const isTrailCosmetic = item.category === 'trail_cosmetic';
+                        const isEquipped = isTrailCosmetic && selectedTrail === item.value;
+
                         return (
                             <motion.div
                                 key={item.id}
@@ -171,7 +128,10 @@ export function QuantumVaultModal({
                                     <div className="flex items-center justify-between mb-3">
                                         <div className="flex items-center gap-3">
                                             <div className="p-3 rounded-xl bg-amber-500/20 border border-amber-400/40 text-amber-300">
-                                                <IconComponent className="w-6 h-6 text-amber-400" />
+                                                {item.category === 'start_shield' && <Shield className="w-6 h-6 text-amber-400" />}
+                                                {item.category === 'magnet' && <Zap className="w-6 h-6 text-amber-400" />}
+                                                {item.category === 'fifth_orbit' && <Circle className="w-6 h-6 text-amber-400" />}
+                                                {item.category === 'trail_cosmetic' && <Flame className="w-6 h-6 text-amber-400" />}
                                             </div>
                                             <div>
                                                 <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
@@ -183,28 +143,48 @@ export function QuantumVaultModal({
                                     </div>
                                     <p className="text-xs text-slate-400 leading-relaxed mb-4">{item.description}</p>
                                     <div className="px-3 py-1.5 rounded-xl bg-slate-900/80 border border-slate-800 flex items-center justify-between text-xs mb-4">
-                                        <span className="text-slate-400 font-bold">Perk:</span>
+                                        <span className="text-slate-400 font-bold">PERK:</span>
                                         <span className="text-amber-300 font-black">{item.perk}</span>
                                     </div>
                                 </div>
 
                                 <div className="flex items-center justify-between pt-3 border-t border-slate-800">
                                     <div className="flex flex-col">
-                                        <span className="text-xs font-black text-emerald-400">{item.realPriceUsd}</span>
-                                        <span className="text-[10px] text-slate-500 font-bold">or {item.priceCredits.toLocaleString()} CR</span>
+                                        <span className="text-xs font-black text-emerald-400">{item.costCredits.toLocaleString()} CR</span>
+                                        <span className="text-[10px] text-slate-500 font-bold">PERMANENT UPGRADE</span>
                                     </div>
+
                                     {isPurchased ? (
-                                        <div className="px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-black flex items-center gap-1.5">
-                                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                                            <span>UNLOCKED</span>
-                                        </div>
+                                        isTrailCosmetic ? (
+                                            <button
+                                                onClick={() => onSelectTrail(isEquipped ? 'default' : (item.value as string))}
+                                                className={`px-4 py-2 rounded-xl text-xs font-black flex items-center gap-1.5 cursor-pointer transition-all ${
+                                                    isEquipped
+                                                        ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/30'
+                                                        : 'bg-slate-800 text-slate-200 hover:bg-slate-700 border border-slate-700'
+                                                }`}
+                                            >
+                                                <Eye className="w-4 h-4" />
+                                                <span>{isEquipped ? 'EQUIPPED' : 'EQUIP'}</span>
+                                            </button>
+                                        ) : (
+                                            <div className="px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/50 text-emerald-300 text-xs font-black flex items-center gap-1.5">
+                                                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                                                <span>UNLOCKED</span>
+                                            </div>
+                                        )
                                     ) : (
                                         <button
                                             onClick={() => setPurchaseModalItem(item)}
-                                            className="px-5 py-2 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 font-black text-xs tracking-wider shadow-lg shadow-amber-500/30 transition-all cursor-pointer flex items-center gap-1.5"
+                                            disabled={!isAffordable}
+                                            className={`px-5 py-2 rounded-xl font-black text-xs tracking-wider shadow-lg transition-all flex items-center gap-1.5 cursor-pointer ${
+                                                isAffordable
+                                                    ? 'bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-slate-950 shadow-amber-500/30'
+                                                    : 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60'
+                                            }`}
                                         >
                                             <Zap className="w-4 h-4 fill-current" />
-                                            <span>ACQUIRE</span>
+                                            <span>{isAffordable ? 'ACQUIRE' : 'NEED CREDITS'}</span>
                                         </button>
                                     )}
                                 </div>
@@ -217,7 +197,7 @@ export function QuantumVaultModal({
                 <div className="px-6 py-4 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
                     <div className="flex items-center gap-2">
                         <Shield className="w-4 h-4 text-amber-400" />
-                        <span>Secure Google Play Store In-App Billing & Quantum Token Verification.</span>
+                        <span>Upgrades persist across restarts and automatically apply on run start.</span>
                     </div>
                     <button
                         onClick={onClose}
@@ -231,7 +211,7 @@ export function QuantumVaultModal({
             {/* Purchase Confirmation Modal */}
             <AnimatePresence>
                 {purchaseModalItem && (
-                    <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/9aid backdrop-blur-md">
+                    <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md">
                         <motion.div
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
@@ -243,7 +223,7 @@ export function QuantumVaultModal({
                             </div>
                             <h3 className="text-lg font-black text-amber-300 mb-2">CONFIRM ACQUISITION</h3>
                             <p className="text-xs text-slate-300 mb-6">
-                                Acquire <strong className="text-white">{purchaseModalItem.name}</strong> for <span className="text-emerald-400 font-bold">{purchaseModalItem.realPriceUsd}</span> ({purchaseModalItem.priceCredits.toLocaleString()} Credits)?
+                                Acquire <strong className="text-white">{purchaseModalItem.name}</strong> for <span className="text-emerald-400 font-bold">{purchaseModalItem.costCredits.toLocaleString()} Credits</span>?
                             </p>
                             <div className="flex gap-3">
                                 <button
@@ -253,7 +233,7 @@ export function QuantumVaultModal({
                                     CANCEL
                                 </button>
                                 <button
-                                    onClick={() => handleBuy(purchaseModalItem)}
+                                    onClick={() => handleConfirmBuy(purchaseModalItem)}
                                     className="flex-1 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-black shadow-lg shadow-amber-500/30 transition-all cursor-pointer"
                                 >
                                     CONFIRM PURCHASE

@@ -1,8 +1,9 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Trophy, ArrowRight, Zap, CheckCircle2, Sparkles, Award, Shield } from 'lucide-react';
+import { Trophy, ArrowRight, CheckCircle2, Sparkles, Medal } from 'lucide-react';
 import { SectorDefinition, SectorProgress, CyberAugment } from '../types';
 import { getAugmentMeta } from '../App';
+import { MedalTier } from '../game/progression';
 
 interface SectorCompleteModalProps {
     currentSectorDef: SectorDefinition;
@@ -10,6 +11,9 @@ interface SectorCompleteModalProps {
     sectorProgress: SectorProgress;
     bonusXP: number;
     bonusScore: number;
+    awardedMedal?: MedalTier;
+    medalBonusCredits?: number;
+    totalCreditsEarned?: number;
     augmentRewardOptions: CyberAugment[];
     onSelectRewardAndAdvance: (aug?: CyberAugment) => void;
 }
@@ -20,9 +24,19 @@ export function SectorCompleteModal({
     sectorProgress,
     bonusXP,
     bonusScore,
+    awardedMedal = 'bronze',
+    medalBonusCredits = 250,
+    totalCreditsEarned = 250,
     augmentRewardOptions,
     onSelectRewardAndAdvance,
 }: SectorCompleteModalProps) {
+    const medalColors = {
+        gold: 'bg-amber-500/20 text-amber-300 border-amber-400/80 shadow-[0_0_15px_rgba(245,158,11,0.5)]',
+        silver: 'bg-slate-300/20 text-slate-200 border-slate-300/80 shadow-[0_0_15px_rgba(203,213,225,0.4)]',
+        bronze: 'bg-amber-700/20 text-amber-500 border-amber-600/80 shadow-[0_0_15px_rgba(180,83,9,0.4)]',
+        none: 'bg-slate-800 text-slate-400 border-slate-700',
+    };
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-xl font-mono">
             <motion.div
@@ -47,6 +61,33 @@ export function SectorCompleteModal({
                     <p className="text-xs text-amber-300 font-bold mt-1">
                         {currentSectorDef.title}
                     </p>
+                </div>
+
+                {/* Medal Award Banner */}
+                <div className="mb-6 p-4 rounded-xl bg-slate-950/80 border border-slate-800 flex items-center justify-between relative z-10">
+                    <div className="flex items-center gap-3">
+                        <div className={`p-3 rounded-2xl border ${medalColors[awardedMedal]}`}>
+                            <Medal className="w-7 h-7" />
+                        </div>
+                        <div>
+                            <div className="text-[10px] text-slate-400 uppercase font-bold">SECTOR MEDAL AWARDED</div>
+                            <div className="text-base font-black uppercase text-white tracking-wider flex items-center gap-2">
+                                <span>{awardedMedal} MEDAL</span>
+                                {medalBonusCredits > 0 && (
+                                    <span className="text-xs text-amber-400 font-bold px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 rounded-full">
+                                        +{medalBonusCredits} CR BONUS
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="text-right">
+                        <div className="text-[10px] text-slate-400 uppercase font-bold">TOTAL RUN CREDITS</div>
+                        <div className="text-lg font-black text-emerald-400 flex items-center gap-1">
+                            <Sparkles className="w-4 h-4 text-emerald-400 animate-spin" />
+                            +{totalCreditsEarned.toLocaleString()} CR
+                        </div>
+                    </div>
                 </div>
 
                 {/* Metrics Breakdown Card */}

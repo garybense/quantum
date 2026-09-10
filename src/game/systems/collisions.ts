@@ -4,7 +4,7 @@ import { getPanelAtAngle, damageShieldPanel, damageBossCore, updateBoss, BossCon
 import { SLING_TUNING } from '../tuning';
 
 export interface SimContactEvent {
-    type: 'item_collected' | 'hazard_hit' | 'gate_passed' | 'shield_hit' | 'solid_collision' | 'panel_hit' | 'panel_shattered' | 'core_hit' | 'vulnerability_started' | 'counterattack_triggered';
+    type: 'item_collected' | 'hazard_hit' | 'gate_passed' | 'shield_hit' | 'solid_collision' | 'panel_hit' | 'panel_shattered' | 'core_hit' | 'vulnerability_started' | 'counterattack_triggered' | 'near_miss';
     entityId: number;
     extra?: any;
 }
@@ -55,10 +55,21 @@ export function resolveCollisions(state: SimState, dt = 0.016, subsystemsPowered
         if (!hazard.active) continue;
         const dx = marble.x - hazard.x;
         const dz = marble.z - hazard.z;
+        const distSq = dx * dx + dz * dz;
         const minDist = marble.radius + 1.2;
-        if (dx * dx + dz * dz <= minDist * minDist) {
+        if (distSq <= minDist * minDist) {
             hazard.active = false;
             events.push({ type: 'hazard_hit', entityId: hazard.id });
+        } else {
+            const nearMissDist = marble.radius + hazard.radius + 2.0;
+            if (distSq <= nearMissDist * nearMissDist) {
+                if (!hazard.nearMissTriggered) {
+                    hazard.nearMissTriggered = true;
+                    events.push({ type: 'near_miss', entityId: hazard.id });
+                }
+            } else if (distSq > (nearMissDist + 1.0) * (nearMissDist + 1.0)) {
+                hazard.nearMissTriggered = false;
+            }
         }
     }
 
