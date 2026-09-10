@@ -1,14 +1,23 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Target, Play, Sparkles, CheckCircle2, ArrowRight } from 'lucide-react';
+import { Target, Play, Sparkles, CheckCircle2, ArrowRight, Calendar, Flame } from 'lucide-react';
 import { SectorDefinition } from '../types';
 
 interface SectorBriefingModalProps {
     sectorDef: SectorDefinition;
     onStartSector: () => void;
+    dailyStreak?: number;
+    dailyBest?: number;
+    onStartDaily?: () => void;
 }
 
-export function SectorBriefingModal({ sectorDef, onStartSector }: SectorBriefingModalProps) {
+export function SectorBriefingModal({
+    sectorDef,
+    onStartSector,
+    dailyStreak = 0,
+    dailyBest = 0,
+    onStartDaily,
+}: SectorBriefingModalProps) {
     const { targets } = sectorDef;
 
     return (
@@ -39,6 +48,34 @@ export function SectorBriefingModal({ sectorDef, onStartSector }: SectorBriefing
                         </p>
                     </div>
 
+                    {/* Daily Challenge Entry Card */}
+                    {onStartDaily && (
+                        <div className="p-2 rounded-xl bg-gradient-to-r from-purple-950/60 via-indigo-950/80 to-slate-950/90 border border-purple-500/40 relative z-10 text-[10px]">
+                            <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-1.5 text-purple-300 font-black">
+                                    <Calendar className="w-3.5 h-3.5 text-purple-400" />
+                                    <span>DAILY SEED CHALLENGE</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <span className="flex items-center gap-1 text-amber-400 font-bold px-1.5 py-0.5 bg-amber-500/20 rounded border border-amber-500/30">
+                                        <Flame className="w-3 h-3 text-amber-400" /> {dailyStreak}d Streak
+                                    </span>
+                                </div>
+                            </div>
+                            <p className="text-[9px] text-slate-300 mb-1.5">
+                                Sector 3 • Fixed Modifier: <strong className="text-purple-300">Heavy Objects Only</strong>.
+                                {dailyBest > 0 && ` Daily Best: ${dailyBest.toLocaleString()} PTS.`}
+                            </p>
+                            <button
+                                onClick={onStartDaily}
+                                className="w-full py-1.5 rounded-lg bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-black text-[10px] uppercase tracking-wider shadow-md transition-all flex items-center justify-center gap-1 cursor-pointer"
+                            >
+                                <Play className="w-3 h-3 fill-current" />
+                                <span>LAUNCH DAILY CHALLENGE</span>
+                            </button>
+                        </div>
+                    )}
+
                     {/* Combined Objective & Instructional Purpose */}
                     <div className="p-2 sm:p-2.5 rounded-xl bg-gradient-to-br from-amber-950/40 via-slate-900/90 to-slate-950/90 border border-amber-500/35 relative z-10 text-[10px] sm:text-[11px] text-slate-200 leading-snug font-sans">
                         <div className="font-mono font-bold text-amber-400 text-[9px] sm:text-[10px] uppercase tracking-wider mb-0.5 flex items-center gap-1">
@@ -50,7 +87,7 @@ export function SectorBriefingModal({ sectorDef, onStartSector }: SectorBriefing
                         </p>
                     </div>
 
-                    {/* Tactical Strategy Tip - Hidden in portrait if tight, visible in landscape */}
+                    {/* Tactical Strategy Tip */}
                     <div className="p-1.5 sm:p-2 rounded-xl bg-cyan-950/40 border border-cyan-500/30 relative z-10 text-[9px] sm:text-[10px] text-cyan-200/90 leading-tight">
                         💡 <span className="font-bold text-cyan-300">TIP:</span> {sectorDef.strategyTip}
                     </div>
@@ -118,4 +155,3 @@ export function SectorBriefingModal({ sectorDef, onStartSector }: SectorBriefing
         </div>
     );
 }
-

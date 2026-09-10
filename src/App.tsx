@@ -26,10 +26,24 @@ import { SectorObjectiveHUD } from './components/SectorObjectiveHUD';
 import { Joystick } from './components/Joystick';
 import { MasterMachineAperture } from './components/MasterMachineAperture';
 import { GroundChargerRings } from './components/GroundChargerRings';
+import { GameLoop } from './components/GameLoop';
+import { SimContactEvent } from './game/systems/collisions';
 import { QuantumVaultModal } from './components/QuantumVaultModal';
 import { LoreBriefingModal } from './components/LoreBriefingModal';
 import { SECTOR_DEFINITIONS, getSectorDefinition } from './data/sectorDefinitions';
 import { CyberItemDrop, RogueVoidHazard, DimensionalShearGate, PlayerStats, LeaderboardEntry, CyberAugment, TemporalState, DynamicTimeScale, SectorProgress } from './types';
+import { calculateSectorMedal, getMedalBonusCredits, saveSectorMedal, getSavedSectorMedals, MedalTier } from './game/progression';
+import { selectActiveMissions, evaluateMissions, ActiveMission, MissionStats } from './game/missions';
+import {
+    getSavedPurchasedUpgrades,
+    savePurchasedUpgrades,
+    getSavedPlayerCredits,
+    savePlayerCredits,
+    getSavedSelectedTrailCosmetic,
+    saveSelectedTrailCosmetic,
+    getAppliedMetaEffects,
+} from './game/metaUpgrades';
+import { getDailySeed } from './game/rng';
 
 let globalUniqueIdCounter = 0;
 export function generateUniqueId(prefix: string = 'id'): string {
@@ -1466,28 +1480,77 @@ export default function App() {
     const [shearGates, setShearGates] = useState<DimensionalShearGate[]>([]);
     const [warpActive, setWarpActive] = useState(false);
     const [showTutorialHint, setShowTutorialHint] = useState(false);
-    const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(INITIAL_LEADERBOARD);
+    const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
     const [showLeaderboard, setShowLeaderboard] = useState(false);
     const [showQuantumVault, setShowQuantumVault] = useState(false);
     const [showLoreBriefing, setShowLoreBriefing] = useState(false);
-    const [playerCredits, setPlayerCredits] = useState(2500);
+    const [playerCredits, setPlayerCredits] = useState<number>(0);
+    const [purchasedUpgrades, setPurchasedUpgrades] = useState<string[]>([]);
+    const [selectedTrail, setSelectedTrail] = useState<string>('default');
+    const [activeMissions, setActiveMissions] = useState<ActiveMission[]>([]);
+    const [sectorMedals, setSectorMedals] = useState<Record<number, MedalTier>>({});
+    const [isDailyChallenge, setIsDailyChallenge] = useState<boolean>(false);
+    const [dailyStreak, setDailyStreak] = useState<number>(0);
+    const [dailyBest, setDailyBest] = useState<number>(0);
+    const [lastDailyDate, setLastDailyDate] = useState<string>('');
+    const [latestMedal, setLatestMedal] = useState<MedalTier>('bronze');
+    const [latestMedalBonus, setLatestMedalBonus] = useState<number>(250);
+    const [latestCreditsEarned, setLatestCreditsEarned] = useState<number>(250);
+
+    const sectorStartTimeRef = useRef<number>(Date.now());
+    const sectorDamageTakenRef = useRef<number>(0);
+    const perfectReleasesRef = useRef<number>(0);
+    const nearMissesRef = useRef<number>(0);
+    const broadsideCountRef = useRef<number>(0);
+
     const [callsign, setCallsign] = useState('NEO_PILOT');
     const [currentAugmentOptions, setCurrentAugmentOptions] = useState<CyberAugment[]>([]);
     const [floatingPoints, setFloatingPoints] = useState<{ id: string; text: string; color: string }[]>([]);
 
-    const handlePurchaseItem = (itemId: string, cost: number, itemType: string) => {
-        setPlayerCredits(prev => Math.max(0, prev - cost));
-        if (itemId === 'refill_pack') {
-            setPlayerStats(prev => ({
-                ...prev,
-                shield: 100,
-                maxShield: Math.max(prev.maxShield, 100),
-                coreIntegrity: 100,
-            }));
-            triggerFloatingText('⚡ QUANTUM ENERGY REFILLED TO 100%!', 'text-amber-300 font-black text-sm');
-        } else {
-            triggerFloatingText('✨ VIP PASS / CYBER SKIN ACQUIRED SUCCESSFULLY!', 'text-emerald-300 font-black text-sm');
+    const handleBuyUpgrade = (upgradeId: string, cost: number) => {
+        if (playerCredits < cost) return;
+        const nextCredits = playerCredits - cost;
+        const nextUpgrades = [...purchasedUpgrades, upgradeId];
+        setPlayerCredits(nextCredits);
+        setPurchasedUpgrades(nextUpgrades);
+        savePlayerCredits(nextCredits);
+        savePurchasedUpgrades(nextUpgrades);
+        triggerFloatingText(`✨ UPGRADE UNLOCKED: ${upgradeId.toUpperCase()}!`, 'text-emerald-300 font-black text-sm');
+    };
+
+    const handleSelectTrail = (trailId: string) => {
+        setSelectedTrail(trailId);
+        saveSelectedTrailCosmetic(trailId);
+        triggerFloatingText(`✨ TRAIL EQUIPPED: ${trailId.toUpperCase()}!`, 'text-amber-300 font-black text-sm');
+    };
+
+    const handleStartDaily = () => {
+        setIsDailyChallenge(true);
+        setSectorLevel(3);
+
+        const today = new Date().toISOString().slice(0, 10);
+        const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        let newStreak = dailyStreak;
+
+        if (lastDailyDate === yesterday) {
+            newStreak += 1;
+        } else if (lastDailyDate !== today) {
+            newStreak = 1;
         }
+
+        setDailyStreak(newStreak);
+        setLastDailyDate(today);
+        Preferences.set({ key: 'daily_streak', value: newStreak.toString() });
+        Preferences.set({ key: 'last_daily_date', value: today });
+
+        setIsSectorBriefingOpen(false);
+        setGameState('playing');
+        sectorStartTimeRef.current = Date.now();
+        sectorDamageTakenRef.current = 0;
+        perfectReleasesRef.current = 0;
+        nearMissesRef.current = 0;
+        broadsideCountRef.current = 0;
+        setActiveMissions(selectActiveMissions(getDailySeed(today)));
     };
 
     // Seamless In-Game Notification Banner Toast
@@ -1731,9 +1794,40 @@ export default function App() {
             shield: Math.min(prev.maxShield, prev.shield + 100),
         }));
 
+        awardSectorMedalAndCredits();
         const shuffled = [...ALL_AUGMENTS].sort(() => Math.random() - 0.5);
-        setSectorRewardOptions(shuffled.slice(0, 3));
+        setCurrentAugmentOptions(shuffled.slice(0, 3));
         setIsSectorCompleteModalOpen(true);
+    };
+
+    const awardSectorMedalAndCredits = () => {
+        const breachTimeSec = Math.max(1, Math.floor((Date.now() - sectorStartTimeRef.current) / 1000));
+        const medal = calculateSectorMedal(
+            sectorLevel,
+            breachTimeSec,
+            sectorDamageTakenRef.current,
+            perfectReleasesRef.current
+        );
+        setLatestMedal(medal);
+        saveSectorMedal(sectorLevel, medal).then(setSectorMedals);
+
+        const medalBonus = getMedalBonusCredits(medal);
+        setLatestMedalBonus(medalBonus);
+
+        const runScoreCredits = Math.floor(playerStats.score / 1000);
+        const totalEarned = runScoreCredits + medalBonus;
+        setLatestCreditsEarned(totalEarned);
+
+        setPlayerCredits(prev => {
+            const next = prev + totalEarned;
+            savePlayerCredits(next);
+            return next;
+        });
+
+        if (isDailyChallenge && playerStats.score > dailyBest) {
+            setDailyBest(playerStats.score);
+            Preferences.set({ key: 'daily_best', value: playerStats.score.toString() });
+        }
     };
 
     const handleMasterMachineBreach = () => {
@@ -1760,8 +1854,9 @@ export default function App() {
             nodesAbsorbed: Math.max(sp.nodesAbsorbed, targets.nodesAbsorbedTarget),
             sectorScore: sp.sectorScore + 10000,
         }));
+        awardSectorMedalAndCredits();
         const shuffled = [...ALL_AUGMENTS].sort(() => Math.random() - 0.5);
-        setSectorRewardOptions(shuffled.slice(0, 3));
+        setCurrentAugmentOptions(shuffled.slice(0, 3));
         setIsSectorCompleteModalOpen(true);
     };
 
@@ -1826,6 +1921,21 @@ export default function App() {
                     console.warn(e);
                 }
             }
+            const credits = await getSavedPlayerCredits();
+            setPlayerCredits(credits);
+            const upgrades = await getSavedPurchasedUpgrades();
+            setPurchasedUpgrades(upgrades);
+            const trail = await getSavedSelectedTrailCosmetic();
+            setSelectedTrail(trail);
+            const medals = await getSavedSectorMedals();
+            setSectorMedals(medals);
+
+            const { value: streakVal } = await Preferences.get({ key: 'daily_streak' });
+            if (streakVal) setDailyStreak(parseInt(streakVal, 10) || 0);
+            const { value: bestVal } = await Preferences.get({ key: 'daily_best' });
+            if (bestVal) setDailyBest(parseInt(bestVal, 10) || 0);
+            const { value: dateVal } = await Preferences.get({ key: 'last_daily_date' });
+            if (dateVal) setLastDailyDate(dateVal);
         };
         loadSavedData();
     }, []);
@@ -1846,11 +1956,37 @@ export default function App() {
 
     const triggerFloatingText = (text: string, color: string = 'text-amber-400') => {
         const id = generateUniqueId('float');
-        setFloatingPoints(prev => [...prev.slice(-6), { id, text, color }]);
+        setFloatingPoints(prev => [...prev.slice(-2), { id, text, color }]); // Capped at 3 max concurrent floaters
         setTimeout(() => {
             setFloatingPoints(prev => prev.filter(p => p.id !== id));
         }, 1200);
     };
+
+    const handleSimEvents = useCallback((events: SimContactEvent[]) => {
+        for (const event of events) {
+            if (event.type === 'near_miss') {
+                soundEngine.playNearMissWhoosh();
+                triggerHapticFeedback(15);
+                setPlayerStats(prev => ({ ...prev, score: prev.score + 100 }));
+                triggerFloatingText('⚡ NEAR MISS (+100 PTS)', 'text-amber-300 font-black text-xs');
+                nearMissesRef.current += 1;
+            } else if (event.type === 'panel_shattered') {
+                soundEngine.playShatterSound();
+                triggerHapticFeedback([50, 30, 80]);
+                feelManager.requestShake(1.2);
+                triggerFloatingText('💥 PANEL SHATTERED!', 'text-amber-300 font-black text-lg');
+            } else if (event.type === 'core_hit') {
+                soundEngine.playSupernovaSound();
+                feelManager.requestShake(0.8);
+                if (simState.boss.coreHp <= 0) {
+                    simState.boss.slowmoTimer = 0.6;
+                    feelManager.triggerZoomPulse(0.12);
+                    feelManager.requestShake(1.6);
+                    triggerFloatingText('💥 CENTRAL CORE DESTROYED!', 'text-amber-300 font-black text-2xl animate-bounce');
+                }
+            }
+        }
+    }, []);
 
     // Game logic loop: Active play regenerates shield; IDLE / LEAVING GAME ALONE causes Gravitational Collapse & Failure!
     useEffect(() => {
@@ -1959,6 +2095,44 @@ export default function App() {
                     comboTimer: newComboTimer,
                 };
             });
+
+            // Music Intensity Director Update
+            const poweredCount = (machineSubsystems.s1Power > 0 ? 1 : 0) + (machineSubsystems.s2Power > 0 ? 1 : 0) + (machineSubsystems.s3Power > 0 ? 1 : 0) + (machineSubsystems.s4Power > 0 ? 1 : 0);
+            let musicInt = 0;
+            if (simState.boss.isVulnerable || poweredCount >= 4 || playerStats.combo >= 8) {
+                musicInt = 3;
+            } else if (poweredCount >= 3 || playerStats.combo >= 4) {
+                musicInt = 2;
+            } else if (poweredCount >= 1 || playerStats.combo >= 2) {
+                musicInt = 1;
+            }
+            soundEngine.updateMusicIntensity(musicInt);
+
+            // 10Hz Side Mission Evaluation
+            if (activeMissions.length > 0) {
+                const mStats: MissionStats = {
+                    hazardsNeutralized: sectorProgress.hazardsNeutralized,
+                    perfectReleases: perfectReleasesRef.current,
+                    damageTaken: sectorDamageTakenRef.current,
+                    gatesPassed: sectorProgress.gatesPassed,
+                    itemsCollected: sectorProgress.itemsCollected,
+                    broadsideCount: broadsideCountRef.current,
+                    nearMisses: nearMissesRef.current,
+                };
+                const { newlyCompleted, totalCreditsEarned, updatedMissions } = evaluateMissions(activeMissions, mStats);
+                if (newlyCompleted.length > 0) {
+                    setActiveMissions(updatedMissions);
+                    setPlayerCredits(prev => {
+                        const nextCredits = prev + totalCreditsEarned;
+                        savePlayerCredits(nextCredits);
+                        return nextCredits;
+                    });
+                    newlyCompleted.forEach(m => {
+                        triggerFloatingText(`🎯 MISSION: ${m.description.toUpperCase()} (+${m.creditReward} CR)!`, 'text-emerald-300 font-black text-sm');
+                        soundEngine.playLevelUpSound();
+                    });
+                }
+            }
         }, 200);
 
         return () => clearInterval(interval);
@@ -2613,6 +2787,7 @@ export default function App() {
 
     const restartGame = () => {
         handleUserInteraction();
+        setIsDailyChallenge(false);
         setSectorLevel(1);
         const sec1Def = getSectorDefinition(1);
         setSectorProgress({
@@ -2630,11 +2805,13 @@ export default function App() {
         setIsSectorCompleteModalOpen(false);
         setIsSectorBriefingOpen(true);
 
+        const metaEffects = getAppliedMetaEffects(purchasedUpgrades, selectedTrail);
+
         setPlayerStats({
             coreIntegrity: 100,
             maxCore: 100,
-            shield: 100,
-            maxShield: 100,
+            shield: 100 + metaEffects.extraShield,
+            maxShield: 100 + metaEffects.extraShield,
             shieldRegenRate: 2.5,
             level: 1,
             xp: 0,
@@ -2646,7 +2823,7 @@ export default function App() {
             highestCombo: 1,
             moveSpeed: 1.0,
             gravitonForce: 0.18,
-            magnetRadius: 0,
+            magnetRadius: metaEffects.extraMagnetRadius,
             empShocks: 0,
             activeItems: [],
             augments: [],
@@ -2694,10 +2871,10 @@ export default function App() {
             id: generateUniqueId('solid'),
             type: randomType,
             position: spawnPos,
-            size: 1.8 + Math.random() * 1.5,
+            size: isDailyChallenge ? 2.5 + Math.random() * 1.5 : 1.8 + Math.random() * 1.5,
             hue,
             colorHex,
-            mass: 10 + Math.random() * 10
+            mass: isDailyChallenge ? 18 + Math.random() * 8 : 10 + Math.random() * 10
         };
 
         setSolidObjects(prev => [...prev.slice(-15), newObj]);
@@ -2937,6 +3114,12 @@ export default function App() {
                     locusPos={locusData.pos}
                     onChargePlayer={handleChargePlayerAmmo}
                     isPaused={isGamePaused}
+                />
+
+                <GameLoop
+                    onEvents={handleSimEvents}
+                    timeScale={temporalState.timeScale}
+                    subsystemsPowered={(machineSubsystems.s1Power > 0 ? 1 : 0) + (machineSubsystems.s2Power > 0 ? 1 : 0) + (machineSubsystems.s3Power > 0 ? 1 : 0) + (machineSubsystems.s4Power > 0 ? 1 : 0)}
                 />
 
                 <Physics gravity={[0, -9.81, 0]} timeStep={1 / 60} paused={isGamePaused}>
@@ -3257,9 +3440,91 @@ export default function App() {
                 </div>
             )}
 
-            {/* SECTOR BRIEFING MODAL */}
-            <React.Suspense fallback={null}>
+            <AnimatePresence>
+                {isSectorBriefingOpen && (
+                    <SectorBriefingModal
+                        sectorDef={currentSectorDef}
+                        onStartSector={() => {
+                            setIsSectorBriefingOpen(false);
+                            setGameState('playing');
+                            sectorStartTimeRef.current = Date.now();
+                            sectorDamageTakenRef.current = 0;
+                            perfectReleasesRef.current = 0;
+                            nearMissesRef.current = 0;
+                            broadsideCountRef.current = 0;
+                            if (activeMissions.length === 0) {
+                                setActiveMissions(selectActiveMissions());
+                            }
+                        }}
+                        dailyStreak={dailyStreak}
+                        dailyBest={dailyBest}
+                        onStartDaily={handleStartDaily}
+                    />
+                )}
 
-</React.Suspense></div>
+                {isSectorCompleteModalOpen && (
+                    <SectorCompleteModal
+                        currentSectorDef={currentSectorDef}
+                        nextSectorDef={getSectorDefinition(sectorLevel + 1)}
+                        sectorProgress={sectorProgress}
+                        bonusXP={sectorLevel * 500}
+                        bonusScore={sectorLevel * 1000}
+                        awardedMedal={latestMedal}
+                        medalBonusCredits={latestMedalBonus}
+                        totalCreditsEarned={latestCreditsEarned}
+                        augmentRewardOptions={currentAugmentOptions}
+                        onSelectRewardAndAdvance={(aug) => {
+                            setIsSectorCompleteModalOpen(false);
+                            setSectorLevel(prev => prev + 1);
+                            sectorStartTimeRef.current = Date.now();
+                            sectorDamageTakenRef.current = 0;
+                            perfectReleasesRef.current = 0;
+                            nearMissesRef.current = 0;
+                            broadsideCountRef.current = 0;
+                            setGameState('playing');
+                        }}
+                    />
+                )}
+
+                {showQuantumVault && (
+                    <QuantumVaultModal
+                        score={playerStats.score}
+                        playerCredits={playerCredits}
+                        purchasedUpgrades={purchasedUpgrades}
+                        selectedTrail={selectedTrail}
+                        onBuyUpgrade={handleBuyUpgrade}
+                        onSelectTrail={handleSelectTrail}
+                        onClose={() => setShowQuantumVault(false)}
+                    />
+                )}
+
+                {showLeaderboard && (
+                    <LeaderboardModal
+                        leaderboard={leaderboard}
+                        userHighScore={playerStats.highScore}
+                        userLevel={playerStats.level}
+                        userCallsign={callsign}
+                        onClose={() => setShowLeaderboard(false)}
+                    />
+                )}
+
+                {showLoreBriefing && (
+                    <LoreBriefingModal onClose={() => setShowLoreBriefing(false)} />
+                )}
+
+                {gameState === 'gameover' && (
+                    <GameOverModal
+                        score={playerStats.score}
+                        highScore={playerStats.highScore}
+                        level={playerStats.level}
+                        highestCombo={playerStats.highestCombo}
+                        isNewHighScore={playerStats.score > playerStats.highScore}
+                        initialCallsign={callsign}
+                        onSubmitScore={handleSubmitScore}
+                        onRestart={restartGame}
+                    />
+                )}
+            </AnimatePresence>
+        </div>
     );
 }

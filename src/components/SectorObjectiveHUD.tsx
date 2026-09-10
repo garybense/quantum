@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Target, ChevronDown, ChevronUp, Info, Shield, ShieldOff, Zap, Flame, Cpu, Radio } from 'lucide-react';
+import { Target, ChevronDown, ChevronUp, Info, Shield, ShieldOff, Zap, CheckCircle2, Sparkles } from 'lucide-react';
 import { SectorDefinition, SectorProgress } from '../types';
+import { ActiveMission } from '../game/missions';
 
 interface SectorObjectiveHUDProps {
     sectorDef: SectorDefinition;
@@ -12,6 +13,7 @@ interface SectorObjectiveHUDProps {
     subsystem2Power?: number;
     subsystem3Power?: number;
     subsystem4Power?: number;
+    activeMissions?: ActiveMission[];
 }
 
 export function SectorObjectiveHUD({
@@ -22,18 +24,16 @@ export function SectorObjectiveHUD({
     subsystem2Power = 0,
     subsystem3Power = 0,
     subsystem4Power = 0,
+    activeMissions = [],
 }: SectorObjectiveHUDProps) {
     const [isExpanded, setIsExpanded] = useState(false);
 
     const { targets } = sectorDef;
 
-    const gatesPct = Math.min(100, Math.floor((sectorProgress.gatesPassed / targets.gatesPassedTarget) * 100));
-    const itemsPct = Math.min(100, Math.floor((sectorProgress.itemsCollected / targets.itemsCollectedTarget) * 100));
-    const comboPct = Math.min(100, Math.floor((sectorProgress.maxComboAchieved / targets.comboTarget) * 100));
-    const nodesPct = Math.min(100, Math.floor((sectorProgress.nodesAbsorbed / targets.nodesAbsorbedTarget) * 100));
-
     const totalActiveSubsystems = (subsystem1Power > 0 ? 1 : 0) + (subsystem2Power > 0 ? 1 : 0) + (subsystem3Power > 0 ? 1 : 0) + (subsystem4Power > 0 ? 1 : 0);
     const coreHealthPct = Math.max(0, Math.min(100, Math.floor((sectorProgress.centralCoreHealth / (targets.centralCoreMaxHealth || 100)) * 100)));
+
+    const completedMissionsCount = activeMissions.filter(m => m.isCompleted).length;
 
     return (
         <div className="relative font-mono pointer-events-auto">
@@ -56,6 +56,12 @@ export function SectorObjectiveHUD({
                         </span>
                     )}
 
+                    {activeMissions.length > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full bg-amber-500/20 text-[10px] text-amber-300 border border-amber-500/40 flex items-center gap-1 font-bold">
+                            <Sparkles className="w-2.5 h-2.5 text-amber-400" /> MISSIONS {completedMissionsCount}/3
+                        </span>
+                    )}
+
                     {sectorProgress.overchargeAmmo >= 100 && (
                         <span className="px-1.5 py-0.2 rounded-full bg-amber-500/30 text-[10px] text-amber-300 border border-amber-400/50 flex items-center gap-1 font-black animate-pulse">
                             <Zap className="w-2.5 h-2.5 text-amber-400" /> 3x AMMO!
@@ -72,7 +78,7 @@ export function SectorObjectiveHUD({
                             initial={{ height: 0, opacity: 0, scale: 0.95 }}
                             animate={{ height: 'auto', opacity: 1, scale: 1 }}
                             exit={{ height: 0, opacity: 0, scale: 0.95 }}
-                            className="p-3 w-64 space-y-2.5 text-xs border border-slate-700/80 bg-slate-950/98 absolute top-full left-0 mt-1.5 rounded-xl shadow-2xl z-40 overflow-hidden"
+                            className="p-3 w-68 space-y-2.5 text-xs border border-slate-700/80 bg-slate-950/98 absolute top-full left-0 mt-1.5 rounded-xl shadow-2xl z-40 overflow-hidden"
                         >
                             <div className="flex justify-between items-center text-[10px] text-amber-400 font-bold uppercase border-b border-slate-800 pb-1">
                                 <span>CENTRAL OBJECTIVE: DESTROY CORE</span>
@@ -85,6 +91,39 @@ export function SectorObjectiveHUD({
                                     </button>
                                 )}
                             </div>
+
+                            {/* Active Side Missions */}
+                            {activeMissions.length > 0 && (
+                                <div className="space-y-1 bg-indigo-950/40 p-2 rounded-lg border border-indigo-500/30">
+                                    <div className="text-[10px] text-indigo-300 font-bold uppercase tracking-wider mb-1 flex items-center gap-1">
+                                        <Sparkles className="w-3 h-3 text-indigo-400" /> SIDE MISSIONS ({completedMissionsCount}/3)
+                                    </div>
+                                    <div className="space-y-1 text-[9.5px]">
+                                        {activeMissions.map((mission) => (
+                                            <div
+                                                key={mission.id}
+                                                className={`flex items-center justify-between p-1 rounded border ${
+                                                    mission.isCompleted
+                                                        ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-300 font-bold'
+                                                        : 'bg-slate-900/60 border-slate-800 text-slate-300'
+                                                }`}
+                                            >
+                                                <div className="flex items-center gap-1.5 truncate">
+                                                    {mission.isCompleted ? (
+                                                        <CheckCircle2 className="w-3 h-3 text-emerald-400 shrink-0" />
+                                                    ) : (
+                                                        <div className="w-2.5 h-2.5 rounded-full border border-slate-600 shrink-0" />
+                                                    )}
+                                                    <span className="truncate">{mission.description}</span>
+                                                </div>
+                                                <span className="text-[9px] font-black text-amber-400 ml-1 shrink-0">
+                                                    +{mission.creditReward} CR
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Core Health Bar */}
                             <div className="space-y-1">
@@ -186,4 +225,3 @@ export function SectorObjectiveHUD({
         </div>
     );
 }
-

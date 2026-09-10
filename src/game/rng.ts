@@ -9,3 +9,14 @@ export function createRNG(seed: number) {
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
 }
+
+export function getDailySeed(dateStr?: string): number {
+    const date = dateStr || new Date().toISOString().slice(0, 10);
+    let hash = 0;
+    for (let i = 0; i < date.length; i++) {
+        const char = date.charCodeAt(i);
+        hash = (hash << 5) - hash + char;
+        hash |= 0;
+    }
+    return Math.abs(hash);
+}

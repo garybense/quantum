@@ -22,7 +22,7 @@ export const GameLoop: React.FC<GameLoopProps> = ({ onEvents, timeScale = 1.0, s
         const targetVx = jx * 34;
         const targetVz = jz * 34;
 
-        const effectiveTimeScale = simState.boss.slowmoTimer > 0 ? 0.85 * timeScale : timeScale;
+        const effectiveTimeScale = simState.boss.slowmoTimer > 0 ? 0.3 * timeScale : timeScale;
         const dt = Math.min(rawDt, 0.05) * effectiveTimeScale;
 
         updateMarble(simState, targetVx, targetVz, dt);
