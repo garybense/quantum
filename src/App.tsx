@@ -12,7 +12,7 @@ import { RenderPerfStats } from './components/PerfOverlay';
 import { gameRefs } from './game/refs';
 import { sessionStore, useSessionStore } from './game/sessionStore';
 import { feelManager } from './game/feel';
-import { MARBLE_TUNING } from './game/tuning';
+import { MARBLE_TUNING, FEEL_TUNING } from './game/tuning';
 import { simState } from './game/state';
 import { CoreHUD, ShieldHUD, LevelHUD, ScoreHUD, TimeScaleHUD, RewindButtonHUD } from './components/HUD';
 import { FractalSingularity, FractalAlgorithmMode } from './components/FractalSingularity';
@@ -24,7 +24,6 @@ import { SectorCompleteModal } from './components/SectorCompleteModal';
 import { SectorBriefingModal } from './components/SectorBriefingModal';
 import { SectorObjectiveHUD } from './components/SectorObjectiveHUD';
 import { Joystick } from './components/Joystick';
-import { MasterMachineAperture } from './components/MasterMachineAperture';
 import { GroundChargerRings } from './components/GroundChargerRings';
 import { GameLoop } from './components/GameLoop';
 import { SimContactEvent } from './game/systems/collisions';
@@ -947,18 +946,28 @@ function InteractiveLocus({
         const bobFreq = 8.0 / (1.0 + carriedMass * MARBLE_TUNING.W_SPEED);
         const bobY = Math.sin(clockTime * bobFreq) * 0.25;
 
+        // Check collection bounce trigger
+        if (gameRefs.collectionBounceTimer > 0) {
+            bumpFlashTimerRef.current = gameRefs.collectionBounceTimer;
+            gameRefs.collectionBounceTimer = 0;
+        }
+
         // Collection bounce Y-hop decay
         if (bumpFlashTimerRef.current > 0) {
             bumpFlashTimerRef.current -= delta;
         }
 
+        const bounceProgress = bumpFlashTimerRef.current > 0 ? Math.max(0, 1.0 - bumpFlashTimerRef.current / 0.25) : 0;
+        const bounceY = bumpFlashTimerRef.current > 0 ? Math.sin(bounceProgress * Math.PI) * 1.5 : 0;
+        const scalePop = bumpFlashTimerRef.current > 0 ? 1.0 + Math.sin(bounceProgress * Math.PI) * 0.35 : 1.0;
+
         // Squash & Stretch calculation on render mesh
         const speed = moveVel;
-        const stretchFactor = 1.0 + Math.min(0.4, speed * 0.015);
-        const squashFactor = 1.0 / Math.sqrt(stretchFactor);
+        const stretchFactor = (1.0 + Math.min(0.4, speed * 0.015)) * scalePop;
+        const squashFactor = (1.0 / Math.sqrt(stretchFactor / scalePop)) * (bumpFlashTimerRef.current > 0 ? 0.82 : 1.0);
 
         if (sphereRef.current) {
-            sphereRef.current.position.y = bobY;
+            sphereRef.current.position.y = bobY + bounceY;
             sphereRef.current.scale.set(squashFactor, squashFactor, stretchFactor);
             if (speed > 0.1) {
                 const angle = Math.atan2(playerVelRef.current.y, playerVelRef.current.x);
@@ -1448,7 +1457,6 @@ export default function App() {
     const joystickVectorRef = useRef({ gx: 0, gz: 0, active: false });
     const [fusionMetrics, setFusionMetrics] = useState({ activeCount: PARTICLE_COUNT, maxFusionStage: 0, totalMass: 100 });
     const [solidObjects, setSolidObjects] = useState<SolidPhysicsObjectData[]>(INITIAL_SOLID_OBJECTS);
-    const [supernovaFlash, setSupernovaFlash] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
 
     // --- CYBERNETIC ARCADE GAME STATE ---
@@ -1558,14 +1566,13 @@ export default function App() {
     const [impactPulse, setImpactPulse] = useState(0);
 
     // Violent Shield Impact Visuals & Audio Cues
-    const [cameraShake, setCameraShake] = useState(0);
     const [shieldImpactFlash, setShieldImpactFlash] = useState(false);
     const [shieldImpactEvent, setShieldImpactEvent] = useState<{ pos: THREE.Vector3; id: number } | null>(null);
 
     const handleShieldViolentImpact = (impactPos: THREE.Vector3) => {
         soundEngine.playShieldViolentImpactSound();
         setImpactPulse(4.2); // Drive 3D central core & shield surge
-        setCameraShake(2.0); // Violent camera shake trauma
+        feelManager.requestShake(1.6); // Violent camera shake trauma
         setShieldImpactFlash(true); // Screen shockwave electrical flash
         setTimeout(() => setShieldImpactFlash(false), 380);
 
@@ -1660,7 +1667,6 @@ export default function App() {
             : 0.15 + (sectorProgress.maxComboAchieved - comboThresh) * 0.018;
 
         const isAllPartsMoving = s1Power > 0 && s2Power > 0 && s3Power > 0 && s4Power > 0;
-        const isShieldActive = !isAllPartsMoving;
 
         return {
             s1Power,
@@ -1668,32 +1674,28 @@ export default function App() {
             s3Power,
             s4Power,
             isAllPartsMoving,
-            isShieldActive,
         };
     }, [currentSectorDef, sectorProgress.nodesAbsorbed, sectorProgress.gatesPassed, sectorProgress.itemsCollected, sectorProgress.maxComboAchieved]);
 
-    // Keep shield status synced in sectorProgress
+    // Keep shield status synced in sectorProgress based on boss vulnerability
     useEffect(() => {
-        setSectorProgress(sp => {
-            if (sp.isShieldActive !== machineSubsystems.isShieldActive) {
-                if (!machineSubsystems.isShieldActive) {
-                    soundEngine.playTachyonPulseSound();
-                    soundEngine.playSupernovaSound();
-                    setSupernovaFlash(true);
-                    setTimeout(() => setSupernovaFlash(false), 800);
-                    triggerFloatingText('🔓 CENTRAL CORE SHIELD LOWERED! CORE IS EXPOSED!', 'text-emerald-300 font-black text-lg animate-bounce');
+        const interval = setInterval(() => {
+            const isShieldActive = !simState.boss.isVulnerable;
+            setSectorProgress(sp => {
+                if (sp.isShieldActive !== isShieldActive) {
+                    return { ...sp, isShieldActive };
                 }
-                return { ...sp, isShieldActive: machineSubsystems.isShieldActive };
-            }
-            return sp;
-        });
-    }, [machineSubsystems.isShieldActive]);
+                return sp;
+            });
+        }, 100);
+        return () => clearInterval(interval);
+    }, []);
 
     const handleCoreImpact = (impactPos: THREE.Vector3, isSlung: boolean) => {
         if (gameState !== 'playing' || isGamePaused) return;
 
         setSectorProgress(sp => {
-            const isShieldActive = sp.isShieldActive;
+            const isShieldActive = !simState.boss.isVulnerable;
             const currentAmmo = sp.overchargeAmmo;
             const maxCoreHp = currentSectorDef.targets.centralCoreMaxHealth || 100;
 
@@ -1701,18 +1703,14 @@ export default function App() {
                 // ABSOLUTE RULE: It is IMPOSSIBLE to damage the central core while shield is active!
                 handleShieldViolentImpact(impactPos);
                 triggerHapticFeedback([120, 60, 180, 60, 240]);
-                const t = currentSectorDef.targets;
                 triggerFloatingText(
-                    `⚡ VIOLENT SHIELD DEFLECTION! HARSH RECOIL! (${sp.gatesPassed}/${t.gateThreshold} Gates, ${sp.itemsCollected}/${t.dropThreshold} Drops, ${sp.nodesAbsorbed}/${t.nodeThreshold} Nodes, ${playerStats.combo}/${t.comboThreshold}x Combo)`,
+                    `⚡ SHIELD PANEL ACTIVE! CORE PROTECTED!`,
                     'text-rose-400 font-black text-xs sm:text-sm tracking-wider animate-bounce drop-shadow-[0_0_12px_rgba(244,63,94,1)]'
                 );
                 return sp;
             } else {
                 // Shield is EXPOSED!
-                soundEngine.playSupernovaSound();
                 soundEngine.playTachyonPulseSound();
-                setSupernovaFlash(true);
-                setTimeout(() => setSupernovaFlash(false), 500);
                 triggerHapticFeedback([60, 50, 100, 50, 150]);
 
                 const isOvercharged = currentAmmo >= 100;
@@ -1970,11 +1968,26 @@ export default function App() {
                 setPlayerStats(prev => ({ ...prev, score: prev.score + 100 }));
                 triggerFloatingText('⚡ NEAR MISS (+100 PTS)', 'text-amber-300 font-black text-xs');
                 nearMissesRef.current += 1;
+            } else if (event.type === 'item_collected') {
+                soundEngine.playItemPickupSound(event.extra?.itemType);
+                triggerHapticFeedback(event.extra?.overcharged ? 40 : 20);
+                gameRefs.collectionBounceTimer = event.extra?.overcharged ? 0.3 : 0.2;
+                setPlayerStats(prev => ({ ...prev, score: prev.score + (event.extra?.overcharged ? 300 : 100) }));
+                triggerFloatingText(event.extra?.overcharged ? '⚡ OVERCHARGED PICKUP (+300 PTS)' : '✨ ITEM PICKUP (+100 PTS)', 'text-amber-300 font-bold text-xs');
             } else if (event.type === 'panel_shattered') {
                 soundEngine.playShatterSound();
-                triggerHapticFeedback([50, 30, 80]);
+                triggerHapticFeedback([80, 50, 120]);
                 feelManager.requestShake(1.2);
                 triggerFloatingText('💥 PANEL SHATTERED!', 'text-amber-300 font-black text-lg');
+            } else if (event.type === 'vulnerability_started') {
+                soundEngine.updateMusicIntensity(3);
+                feelManager.requestShake(1.6);
+                setTemporalState(prev => ({ ...prev, timeScale: FEEL_TUNING.SLOWMO_SCALE as DynamicTimeScale, timeScaleLabel: '0.85x SLOWMO' }));
+                triggerFloatingText('🔓 CORE VULNERABLE! ATTACK NOW!', 'text-emerald-300 font-black text-xl animate-bounce');
+            } else if (event.type === 'counterattack_triggered') {
+                soundEngine.playHazardHitSound();
+                feelManager.requestShake(1.2);
+                triggerFloatingText('⚠️ COUNTERATTACK DETONATED!', 'text-rose-400 font-black text-sm animate-pulse');
             } else if (event.type === 'core_hit') {
                 soundEngine.playSupernovaSound();
                 feelManager.requestShake(0.8);
