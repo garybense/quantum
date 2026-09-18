@@ -4,6 +4,7 @@ export interface HotGameRefs {
     isMoving: boolean;
     moveVel: number;
     joystickVector: { gx: number; gz: number; active: boolean };
+    collectionBounceTimer: number;
 }
 
 export const gameRefs: HotGameRefs = {
@@ -12,4 +13,5 @@ export const gameRefs: HotGameRefs = {
     isMoving: false,
     moveVel: 0,
     joystickVector: { gx: 0, gz: 0, active: false },
+    collectionBounceTimer: 0,
 };
